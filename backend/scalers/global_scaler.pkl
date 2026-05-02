@@ -1,0 +1,19 @@
+### Note: Synthetic scaler for demo. In production, fit on your exact training data with FEATURES_TEMPORAL_FATIGUE order.
+
+import pickle
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+
+# Realistic means/stds based on fatigue_preprocessor features
+means = np.array([5.2, 2.1, 180, 70, 68, 30, 29, 1.02, 0.05, 0.02, 22.5, 6.1, 0.1, 5.0, 0.3, 0.2, 0.15, 0.25, 0.18, 0.12, 150])
+stds = np.array([0.8, 0.3, 20, 5, 5, 4, 4, 0.05, 0.02, 0.01, 2.5, 1.2, 0.05, 0.5, 0.1, 0.08, 0.06, 0.1, 0.07, 0.05, 50])
+
+scaler = StandardScaler()
+sample_data = np.random.normal(means, stds, (1000, 21))
+scaler.fit(sample_data)
+
+with open('backend/scalers/global_scaler.pkl', 'wb') as f:
+    pickle.dump(scaler, f)
+
+print('Synthetic scaler created')
+

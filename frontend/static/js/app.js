@@ -26,10 +26,14 @@ const state = {
     file: null,
     timeChart: null,        // Chart.js instance
   },
-  quality: {
+quality: {
     mode: 'upload',         // 'upload' | 'manual'
     file: null,
     timeChart: null,        // Chart.js instance
+  },
+  coaching: {
+    mode: 'upload',       // 'upload' | 'manual' (only upload supported for DQN)
+    file: null,
   },
 };
 
@@ -1127,4 +1131,129 @@ function showToast(msg, type = '') {
   toast.className   = `toast show ${type}`;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3500);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// DQN AI COACH — FILE HANDLING & PREDICTION
+// ══════════════════════════════════════════════════════════════
+function handleCoachingDrop(e) {
+  e.preventDefault();
+  document.getElementById('coachingDropzone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) setCoachingFile(file);
+}
+function handleCoachingFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) setCoachingFile(file);
+}
+function setCoachingFile(file) {
+  state.coaching.file = file;
+  const chip = document.getElementById('coachingFileName');
+  chip.style.display = 'flex';
+  chip.innerHTML = `📄 ${file.name} <span style="margin-left:auto;color:var(--text-muted)">${(file.size/1024).toFixed(1)} KB</span>`;
+}
+
+// DQN expected columns
+const DQN_COLUMNS = [
+  'fatigue', 'asymmetry_knee', 'speed', 'cadence', 'variability',
+  'avg_fatigue', 'injury_risk', 'consistency', 'qom', 'asymmetry_stride',
+  'max_speed', 'height', 'weight'
+];
+
+async function runCoachingPrediction() {
+  const btn = document.getElementById('coachingPredictBtn');
+  if (!state.coaching.file) {
+    showToast('Please select a CSV file first', 'error');
+    return;
+  }
+  btn.disabled = true;
+  showLoading('Running DQN AI Coach on your data…');
+
+  try {
+    const fd = new FormData();
+    fd.append('file', state.coaching.file);
+const res  = await fetch('/upload/dqn', { method: 'POST', body: fd });
+    const data = await res.json();
+    hideLoading();
+
+    if (data.error) {
+      showToast(data.error, 'error');
+      btn.disabled = false;
+      return;
+    }
+
+    displayCoachingResult(data);
+    showToast(`AI Coaching complete — ${data.recommendations.length} recommendations generated`, 'success');
+
+  } catch (err) {
+    hideLoading();
+    showToast('Upload failed: ' + err.message, 'error');
+  }
+  btn.disabled = false;
+}
+
+function displayCoachingResult(data) {
+  document.getElementById('coachingEmptyState').style.display  = 'none';
+  document.getElementById('coachingResultPanel').style.display = '';
+
+  const recs = data.recommendations || [];
+  const runnerIds = data.runner_ids || [];
+
+  // Build summary stats
+  const summaryDiv = document.getElementById('coachingSummaryStats');
+  summaryDiv.innerHTML = `
+    <div class="stat-card">
+      <div class="stat-value">${data.rows || recs.length}</div>
+      <div class="stat-label">Runners</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${recs.length}</div>
+      <div class="stat-label">Recommendations</div>
+    </div>
+  `;
+
+  // Build recommendations list
+  const listDiv = document.getElementById('coachingRecommendationsList');
+  if (recs.length === 0) {
+    listDiv.innerHTML = '<p class="empty-msg">No recommendations generated.</p>';
+    return;
+  }
+
+  listDiv.innerHTML = recs.map((rec, idx) => {
+    const runnerId = runnerIds[idx] || `Runner ${idx + 1}`;
+    const action = rec.recommended_action || rec;
+    const intensity = action.intensity || 'Medium';
+    const rest = action.rest || 'Medium';
+    const focus = action.focus || 'Technique Refinement';
+    const adjustment = action.adjustment || 'None Needed';
+
+    const intensityColor = { Low: '#34d399', Medium: '#f59e0b', High: '#f87171' }[intensity] || '#f59e0b';
+
+    return `
+      <div class="coach-rec-card">
+        <div class="coach-rec-header">
+          <span class="coach-rec-runner">🏃 ${runnerId}</span>
+          <span class="coach-rec-action-code">#${action.action_code !== undefined ? action.action_code : idx}</span>
+        </div>
+        <div class="coach-rec-body">
+          <div class="coach-rec-field">
+            <span class="coach-rec-label">Intensity</span>
+            <span class="coach-rec-value" style="color:${intensityColor}">${intensity}</span>
+          </div>
+          <div class="coach-rec-field">
+            <span class="coach-rec-label">Rest Period</span>
+            <span class="coach-rec-value">${rest}</span>
+          </div>
+          <div class="coach-rec-field">
+            <span class="coach-rec-label">Focus Area</span>
+            <span class="coach-rec-value">${focus}</span>
+          </div>
+          <div class="coach-rec-field">
+            <span class="coach-rec-label">Adjustment</span>
+            <span class="coach-rec-value">${adjustment}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
