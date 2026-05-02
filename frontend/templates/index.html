@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GaitAI — Biomechanics Intelligence Platform</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+
+<!-- AMBIENT BACKGROUND -->
+<div class="ambient-bg">
+  <div class="ambient-orb orb-1"></div>
+  <div class="ambient-orb orb-2"></div>
+  <div class="ambient-orb orb-3"></div>
+  <div class="grid-overlay"></div>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-mark">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <path d="M8 24 L16 8 L24 24" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M10.5 19 L21.5 19" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+          <circle cx="16" cy="8" r="2" fill="var(--accent)"/>
+        </svg>
+      </div>
+      <div class="logo-text">
+        <span class="logo-name">GaitAI</span>
+        <span class="logo-sub">Biomechanics Intelligence Platform</span>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot" id="modelStatusDot"></span>
+        <span id="modelStatusText">Connecting…</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- NAV TABS -->
+<nav class="tab-nav">
+  <div class="tab-nav-inner">
+    <button class="tab-btn active" data-tab="full">
+      <span class="tab-icon">🔬</span>
+      <span>Full Analysis</span>
+    </button>
+    <!-- <button class="tab-btn" data-tab="gait">
+      <span class="tab-icon">🦿</span>
+      <span>Gait Classifier</span>
+    </button> -->
+    <button class="tab-btn" data-tab="fatigue">
+      <span class="tab-icon">⚡</span>
+      <span>Fatigue & Injury</span>
+    </button>
+    <button class="tab-btn" data-tab="about">
+      <span class="tab-icon">📐</span>
+      <span>About</span>
+    </button>
+    <div class="tab-indicator"></div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+  <!-- ══════════════════════════════════
+       TAB 0: FULL ANALYSIS (unified)
+  ══════════════════════════════════ -->
+  <section id="tab-full" class="tab-panel active">
+
+    <!-- UPLOAD CARD -->
+    <div class="card unified-upload-card">
+      <div class="card-header">
+        <h2 class="card-title">Full Analysis — Upload Once, Run All Models</h2>
+        <span class="unified-badge">Gait · Fatigue · Injury</span>
+      </div>
+      <!-- <p class="unified-desc">
+        Upload a single CSV or Excel file. The system automatically runs the
+        <strong>Gait Classifier</strong>, <strong>Fatigue Regressor</strong>, and
+        <strong>Injury Risk Classifier</strong> on your data and shows all results below.
+      </p> -->
+
+      <div class="upload-zone" id="unifiedDropzone"
+           ondragover="handleDragOver(event,'unifiedDropzone')"
+           ondragleave="handleDragLeave(event,'unifiedDropzone')"
+           ondrop="handleUnifiedDrop(event)">
+        <div class="upload-visual">
+          <div class="upload-icon-wrap">
+            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+              <rect x="6" y="12" width="28" height="22" rx="3" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>
+              <path d="M20 6 L20 24 M14 12 L20 6 L26 12" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <p class="upload-title">Drop your CSV or Excel file here</p>
+          <p class="upload-hint">
+            Include columns for <code>ankle/knee/hip angles</code>, <code>GRF</code>, <code>moments</code>
+            for gait, and <code>speed</code>, <code>stride_length</code>, <code>cadence</code>,
+            <code>knee/hip left/right</code> for fatigue.<br>
+            Missing columns for one model are handled gracefully.
+          </p>
+        </div>
+        <label class="upload-btn">
+          Browse File
+          <input type="file" id="unifiedFileInput" accept=".csv,.xlsx,.xls" onchange="handleUnifiedFileSelect(event)" hidden />
+        </label>
+      </div>
+      <div id="unifiedFileName" class="file-chip" style="display:none;"></div>
+
+      <button class="predict-btn unified-btn" id="unifiedAnalyzeBtn" onclick="runUnifiedAnalysis()">
+        <span class="btn-icon">◈</span> Run Full Analysis
+      </button>
+    </div>
+
+    <!-- RESULTS -->
+    <div id="unifiedEmptyState" class="empty-state" style="margin-top:24px;">
+      <div class="empty-graphic">
+        <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+          <circle cx="40" cy="40" r="35" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3"/>
+          <path d="M25 52 Q32 30 40 35 Q48 40 55 28" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.4"/>
+          <circle cx="40" cy="40" r="4" fill="var(--accent)" opacity="0.3"/>
+        </svg>
+      </div>
+      <p>Upload a file to run all models at once</p>
+    </div>
+
+    <div id="unifiedResultPanel" style="display:none;">
+<!--
+       ── GAIT RESULTS ─────────────────────────── 
+      <div id="unifiedGaitSection" class="unified-section" style="display:none;">
+        <div class="unified-section-header">
+          <span class="unified-section-icon">🦿</span>
+          <h3 class="unified-section-title">Gait Classification</h3>
+        </div>
+        <div id="unifiedGaitError" class="alert-strip" style="display:none;"></div>
+        <div class="panel-grid" style="margin-top:0;">
+          <div class="card" style="padding:20px;">
+            <div class="result-hero">
+              <div class="result-badge" id="uGaitBadge">
+                <span id="uGaitBadgeIcon" class="badge-icon"></span>
+                <span id="uGaitBadgeLabel" class="badge-label"></span>
+              </div>
+              <div class="confidence-block">
+                <div class="confidence-header">
+                  <span class="confidence-label-text">Confidence</span>
+                  <span id="uGaitConfLabel" class="confidence-value"></span>
+                </div>
+                <div class="confidence-bar-track">
+                  <div class="confidence-bar-fill" id="uGaitConfBar"></div>
+                </div>
+              </div>
+            </div>
+            <div id="uGaitLowConfWarn" class="alert-strip" style="display:none;">
+              ⚠️ Low confidence — consider providing more signal data
+            </div>
+          </div>
+          <div class="card" style="padding:20px;">
+            <h3 class="section-label" style="margin-bottom:10px;">Class Probabilities</h3>
+            <div id="uGaitProbBars"></div>
+          </div>
+        </div>
+        <div id="uGaitChartWrap" class="card" style="display:none;margin-top:16px;padding:20px;">
+          <div class="chart-header">
+            <h3 class="section-label">Signal Visualization</h3>
+            <select id="uSignalSelect" class="chart-select" onchange="updateUnifiedGaitChart()"></select>
+          </div>
+          <div class="chart-container">
+            <canvas id="uGaitSignalChart"></canvas>
+          </div>
+        </div>
+      </div>
+ -->
+      <!-- ── FATIGUE + INJURY RESULTS ─────────────── -->
+      <div id="unifiedFatigueSection" class="unified-section" style="display:none;margin-top:20px;">
+        <div class="unified-section-header">
+          <span class="unified-section-icon">⚡</span>
+          <h3 class="unified-section-title">Fatigue & Injury Risk</h3>
+        </div>
+        <div id="unifiedFatigueError" class="alert-strip" style="display:none;"></div>
+        <div class="risk-cards-grid">
+          <!-- FATIGUE CARD -->
+          <div class="risk-card" id="uFatigueRiskCard">
+            <div class="risk-card-label">Fatigue Level</div>
+            <div class="risk-level-wrap">
+              <span class="risk-icon" id="uFatigueIcon">⚡</span>
+              <span class="risk-level" id="uFatigueLevel">—</span>
+            </div>
+            <div class="risk-bar-wrap">
+              <div class="risk-bar-track">
+                <div class="risk-bar-fill" id="uFatigueScoreBar"></div>
+                <div class="risk-threshold-marker" id="uFatigueThreshLine"></div>
+              </div>
+              <div class="risk-bar-labels">
+                <span id="uFatigueScoreLabel" class="mono-val"></span>
+                <span id="uFatigueThreshLabel" class="threshold-label"></span>
+              </div>
+            </div>
+            <p class="risk-message" id="uFatigueMessage"></p>
+          </div>
+          <!-- INJURY CARD -->
+          <div class="risk-card" id="uInjuryRiskCard">
+            <div class="risk-card-label">Injury Risk</div>
+            <div class="risk-level-wrap">
+              <span class="risk-icon" id="uInjuryIcon">🦴</span>
+              <span class="risk-level" id="uInjuryLevel">—</span>
+            </div>
+            <div class="risk-bar-wrap">
+              <div class="risk-bar-track">
+                <div class="risk-bar-fill" id="uInjuryScoreBar"></div>
+              </div>
+              <div class="risk-bar-labels">
+                <span id="uInjuryProbLabel" class="mono-val"></span>
+              </div>
+            </div>
+            <p class="risk-message" id="uInjuryMessage"></p>
+          </div>
+        </div>
+        <div id="uFatigueChartWrap" class="card" style="display:none;margin-top:16px;padding:20px;">
+          <div class="chart-header">
+            <h3 class="section-label">Fatigue & Injury Over Time</h3>
+          </div>
+          <div class="chart-container">
+            <canvas id="uFatigueTimeChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+<!-- 
+  ══════════════════════════════════
+       TAB 1: GAIT CLASSIFIER
+  ══════════════════════════════════ 
+  <section id="tab-gait" class="tab-panel" style="display:none;">
+    <div class="panel-grid">
+
+       INPUT CARD 
+      <div class="card input-card">
+        <div class="card-header">
+          <h2 class="card-title">Input Data</h2>
+          <div class="mode-toggle">
+            <button class="mode-btn active" id="gaitUploadBtn" onclick="setGaitMode('upload')">Upload</button>
+            <button class="mode-btn" id="gaitManualBtn" onclick="setGaitMode('manual')">Manual</button>
+            <button class="mode-btn mode-btn-disabled" title="Video analysis coming soon" onclick="showVideoComingSoon()">
+              🎥 Video <span class="badge-soon">Soon</span>
+            </button>
+          </div>
+        </div>
+
+       Upload Mode 
+        <div id="gaitUploadMode">
+          <div class="upload-zone" id="gaitDropzone"
+               ondragover="handleDragOver(event, 'gaitDropzone')"
+               ondragleave="handleDragLeave(event, 'gaitDropzone')"
+               ondrop="handleGaitDrop(event)">
+            <div class="upload-visual">
+              <div class="upload-icon-wrap">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                  <rect x="6" y="12" width="28" height="22" rx="3" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>
+                  <path d="M20 6 L20 24 M14 12 L20 6 L26 12" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <p class="upload-title">Drop your CSV or Excel file</p>
+              <p class="upload-hint">Expected columns:<br>
+                <code>ankle_angle, knee_angle, hip_angle</code><br>
+                <code>grf_vertical, grf_ap, grf_ml</code><br>
+                <code>ankle_moment, knee_moment, hip_moment</code>
+              </p>
+            </div>
+            <label class="upload-btn">
+              Browse File
+              <input type="file" id="gaitFileInput" accept=".csv,.xlsx,.xls" onchange="handleGaitFileSelect(event)" hidden />
+            </label>
+          </div>
+          <div id="gaitFileName" class="file-chip" style="display:none;"></div>
+        </div>
+
+         Manual Mode 
+        <div id="gaitManualMode" style="display:none;">
+          <p class="manual-hint">Enter signal values as comma-separated numbers (e.g. <code>5.2,6.1,7.3,…</code>)</p>
+          <div class="signal-grid" id="gaitSignalInputs">
+            Generated by app.js 
+          </div>
+          <div class="spatio-section">
+            <h3 class="spatio-title">Spatiotemporal Parameters <span class="optional-tag">optional</span></h3>
+            <div class="spatio-grid">
+              <div class="field-wrap">
+                <label>Step Width <span class="unit">(m)</span></label>
+                <input type="number" id="step_width" step="0.01" placeholder="0.12" />
+              </div>
+              <div class="field-wrap">
+                <label>Cycle Duration <span class="unit">(s)</span></label>
+                <input type="number" id="cycle_duration" step="0.01" placeholder="1.1" />
+              </div>
+              <div class="field-wrap">
+                <label>Velocity <span class="unit">(m/s)</span></label>
+                <input type="number" id="velocity" step="0.01" placeholder="1.3" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="predict-btn" id="gaitPredictBtn" onclick="runGaitPrediction()">
+          <span class="btn-icon">◈</span> Analyze Gait
+        </button>
+      </div>
+
+     RESULTS CARD
+      <div class="card results-card">
+        <div class="card-header">
+          <h2 class="card-title">Classification Result</h2>
+        </div>
+
+        <div id="gaitEmptyState" class="empty-state">
+          <div class="empty-graphic">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="35" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3"/>
+              <path d="M25 52 Q32 30 40 35 Q48 40 55 28" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.4"/>
+              <circle cx="40" cy="40" r="4" fill="var(--accent)" opacity="0.3"/>
+            </svg>
+          </div>
+          <p>Upload a file or enter signal values<br>to begin analysis</p>
+        </div>
+
+        <div id="gaitResultPanel" style="display:none;">
+
+          Classification badge 
+          <div class="result-hero">
+            <div class="result-badge" id="gaitBadge">
+              <span id="gaitBadgeIcon" class="badge-icon"></span>
+              <span id="gaitBadgeLabel" class="badge-label"></span>
+            </div>
+            <div class="confidence-block">
+              <div class="confidence-header">
+                <span class="confidence-label-text">Confidence</span>
+                <span id="gaitConfidenceLabel" class="confidence-value"></span>
+              </div>
+              <div class="confidence-bar-track">
+                <div class="confidence-bar-fill" id="gaitConfBar"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="gaitLowConfWarn" class="alert-strip" style="display:none;">
+            ⚠️ Low confidence — consider providing more signal data
+          </div>
+
+      Probability breakdown 
+          <div class="prob-section">
+            <h3 class="section-label">Class Probabilities</h3>
+            <div id="gaitProbBars"></div>
+          </div>
+ Signal chart
+
+          <div id="gaitChartWrap" style="display:none;">
+            <div class="chart-header">
+              <h3 class="section-label">Signal Visualization</h3>
+              <select id="signalSelect" class="chart-select" onchange="updateGaitChart()"></select>
+            </div>
+            <div class="chart-container">
+              <canvas id="gaitSignalChart"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section> 
+-->
+
+  <!-- ══════════════════════════════════
+       TAB 2: FATIGUE & INJURY
+  ══════════════════════════════════ -->
+  <section id="tab-fatigue" class="tab-panel" style="display:none;">
+    <div class="panel-grid">
+
+      <!-- INPUT CARD -->
+      <div class="card input-card">
+        <div class="card-header">
+          <h2 class="card-title">Input Data</h2>
+          <div class="mode-toggle">
+            <button class="mode-btn active" id="fatigueUploadBtn" onclick="setFatigueMode('upload')">Upload</button>
+            <button class="mode-btn" id="fatigueManualBtn" onclick="setFatigueMode('manual')">Manual</button>
+            <button class="mode-btn mode-btn-disabled" title="Video analysis coming soon" onclick="showVideoComingSoon()">
+              🎥 Video <span class="badge-soon">Soon</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Upload Mode -->
+        <div id="fatigueUploadMode">
+          <div class="upload-zone" id="fatigueDropzone"
+               ondragover="handleDragOver(event, 'fatigueDropzone')"
+               ondragleave="handleDragLeave(event, 'fatigueDropzone')"
+               ondrop="handleFatigueDrop(event)">
+            <div class="upload-visual">
+              <div class="upload-icon-wrap">
+                <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+                  <rect x="6" y="12" width="28" height="22" rx="3" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="3 2"/>
+                  <path d="M20 6 L20 24 M14 12 L20 6 L26 12" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </div>
+              <p class="upload-title">Drop time-series CSV file</p>
+              <p class="upload-hint">Expected columns:<br>
+                <code>speed, stride_length, cadence</code><br>
+                <code>knee_left/right, hip_left/right</code><br>
+                <code>weight_kg, height_cm, variability</code>
+              </p>
+            </div>
+            <label class="upload-btn">
+              Browse File
+              <input type="file" id="fatigueFileInput" accept=".csv,.xlsx,.xls" onchange="handleFatigueFileSelect(event)" hidden />
+            </label>
+          </div>
+          <div id="fatigueFileName" class="file-chip" style="display:none;"></div>
+        </div>
+
+        <!-- Manual Mode -->
+        <div id="fatigueManualMode" style="display:none;">
+          <div class="manual-form" id="fatigueManualForm">
+            <!-- Generated by app.js -->
+          </div>
+        </div>
+
+        <button class="predict-btn" id="fatiguePredictBtn" onclick="runFatiguePrediction()">
+          <span class="btn-icon">◈</span> Analyze Fatigue & Injury Risk
+        </button>
+      </div>
+
+      <!-- RESULTS CARD -->
+      <div class="card results-card">
+        <div class="card-header">
+          <h2 class="card-title">Risk Assessment</h2>
+        </div>
+
+        <div id="fatigueEmptyState" class="empty-state">
+          <div class="empty-graphic">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <circle cx="40" cy="40" r="35" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3"/>
+              <path d="M20 55 Q27 38 34 42 Q41 46 48 30 Q55 14 62 25" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.4"/>
+              <circle cx="40" cy="40" r="4" fill="#f59e0b" opacity="0.3"/>
+            </svg>
+          </div>
+          <p>Upload a time-series file or enter<br>biomechanical values to assess risk</p>
+        </div>
+
+        <div id="fatigueResultPanel" style="display:none;">
+
+          <div class="risk-cards-grid">
+
+            <!-- FATIGUE CARD -->
+            <div class="risk-card" id="fatigueRiskCard">
+              <div class="risk-card-label">Fatigue Level</div>
+              <div class="risk-level-wrap">
+                <span class="risk-icon" id="fatigueIcon">⚡</span>
+                <span class="risk-level" id="fatigueLevel">—</span>
+              </div>
+              <div class="risk-bar-wrap">
+                <div class="risk-bar-track">
+                  <div class="risk-bar-fill" id="fatigueScoreBar"></div>
+                  <div class="risk-threshold-marker" id="fatigueThreshLine"></div>
+                </div>
+                <div class="risk-bar-labels">
+                  <span id="fatigueScoreLabel" class="mono-val"></span>
+                  <span id="fatigueThreshLabel" class="threshold-label"></span>
+                </div>
+              </div>
+              <p class="risk-message" id="fatigueMessage"></p>
+            </div>
+
+            <!-- INJURY CARD -->
+            <div class="risk-card" id="injuryRiskCard">
+              <div class="risk-card-label">Injury Risk</div>
+              <div class="risk-level-wrap">
+                <span class="risk-icon" id="injuryIcon">🦴</span>
+                <span class="risk-level" id="injuryLevel">—</span>
+              </div>
+              <div class="risk-bar-wrap">
+                <div class="risk-bar-track">
+                  <div class="risk-bar-fill" id="injuryScoreBar"></div>
+                </div>
+                <div class="risk-bar-labels">
+                  <span id="injuryProbLabel" class="mono-val"></span>
+                </div>
+              </div>
+              <div id="asymFlagBadge" class="asym-badge" style="display:none;">
+                ⚠️ High Asymmetry Detected
+              </div>
+              <p class="risk-message" id="injuryMessage"></p>
+            </div>
+          </div>
+
+          <!-- Time-series chart -->
+          <div id="fatigueChartWrap" style="display:none;">
+            <div class="chart-header">
+              <h3 class="section-label">Fatigue & Injury Over Time</h3>
+            </div>
+            <div class="chart-container">
+              <canvas id="fatigueTimeChart"></canvas>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════
+       TAB 3: ABOUT
+  ══════════════════════════════════ -->
+  <section id="tab-about" class="tab-panel" style="display:none;">
+    <div class="about-grid">
+<!-- 
+      <div class="card about-card">
+        <div class="about-card-icon">🦿</div>
+        <h2>Gait Classifier</h2>
+        <div class="about-meta">
+          <span class="meta-tag">3-Class</span>
+          <span class="meta-tag">210 Features</span>
+          <span class="meta-tag">Stacking Ensemble</span>
+        </div>
+        <ul class="about-list">
+          <li><strong>Model:</strong> Stacking (RF + SVM → Logistic Regression), Calibrated</li>
+          <li><strong>Classes:</strong> Healthy / Amputee K2 / Amputee K3</li>
+          <li><strong>Pipeline:</strong> Raw signal → 101-pt interpolation → 23 features/signal × 9 signals + 3 spatiotemporal</li>
+          <li><strong>Validation:</strong> Nested GroupKFold CV (subject-isolated)</li>
+        </ul>
+      </div> -->
+
+      <div class="card about-card">
+        <div class="about-card-icon">⚡</div>
+        <h2>Fatigue & Injury</h2>
+        <div class="about-meta">
+          <span class="meta-tag">Regression + Classification</span>
+          <span class="meta-tag">Paralympic Data</span>
+        </div>
+        <ul class="about-list">
+          <li><strong>Fatigue:</strong> Gradient Boosting Regressor → score (0–1)</li>
+          <li><strong>Injury:</strong> Gradient Boosting Classifier → risk probability</li>
+          <li><strong>Features:</strong> Rolling joint variability, cumulative impact, symmetry decay</li>
+          <li><strong>Thresholds:</strong> Fatigue ≥ 0.897 = High | Asymmetry ≥ 0.979 = Flag</li>
+        </ul>
+      </div>
+
+      <div class="card about-card">
+        <div class="about-card-icon">🎥</div>
+        <h2>Video Analysis <span class="coming-soon-badge">Coming Soon</span></h2>
+        <div class="about-meta">
+          <span class="meta-tag">Computer Vision</span>
+          <span class="meta-tag">MediaPipe / OpenPose</span>
+        </div>
+        <ul class="about-list">
+          <li>Upload a video of a subject walking</li>
+          <li>Automatic pose estimation extracts joint angles</li>
+          <li>Signals fed directly into Gait Classifier pipeline</li>
+          <li>No manual data entry required</li>
+        </ul>
+        <div class="video-placeholder">
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+            <rect x="4" y="10" width="32" height="28" rx="4" stroke="var(--text-muted)" stroke-width="1.5" stroke-dasharray="3 2"/>
+            <path d="M36 18 L44 14 L44 34 L36 30" stroke="var(--text-muted)" stroke-width="1.5" stroke-linejoin="round"/>
+            <circle cx="17" cy="24" r="5" stroke="var(--accent)" stroke-width="1.5" opacity="0.5"/>
+            <path d="M15 24 L19 24 M17 22 L17 26" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+          </svg>
+          <p>Video upload endpoint will be available in the next release</p>
+        </div>
+      </div>
+
+      <div class="card about-card arch-card">
+        <div class="about-card-icon">🏗️</div>
+        <h2>Architecture</h2>
+        <pre class="arch-code">gait_web/
+├── backend/
+│   ├── app.py                      ← Flask routes
+│   ├── preprocessors/
+│   │   ├── gait_preprocessor.py    ← DSP + feature extraction
+│   │   └── fatigue_preprocessor.py ← Feature engineering
+│   └── uploads/                    ← Temp storage
+├── frontend/
+│   ├── templates/index.html
+│   └── static/
+│       ├── css/style.css
+│       └── js/app.js
+└── models/
+    ├── gait_classifier/
+    │   ├── gait_classifier_production.pkl
+    │   ├── label_encoder.pkl
+    │   └── model_metadata.pkl
+    └── fatigue_injury_model/
+        ├── fatigue_pipeline.joblib
+        ├── injury_pipeline.joblib
+        └── thresholds.json</pre>
+      </div>
+
+    </div>
+  </section>
+
+</main>
+
+<!-- LOADING OVERLAY -->
+<div id="loadingOverlay" class="loading-overlay" style="display:none;">
+  <div class="loading-content">
+    <div class="loading-spinner"></div>
+    <p id="loadingText">Analyzing…</p>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast"></div>
+
+<!-- VIDEO COMING SOON MODAL -->
+<div id="videoModal" class="modal-overlay" style="display:none;" onclick="closeVideoModal()">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-icon">🎥</div>
+    <h3>Video Analysis — Coming Soon</h3>
+    <p>Computer vision-based gait analysis from video upload is currently in development. The feature will use pose estimation (MediaPipe / OpenPose) to automatically extract joint angles and feed them into the classification pipeline.</p>
+    <button class="modal-close-btn" onclick="closeVideoModal()">Got it</button>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
