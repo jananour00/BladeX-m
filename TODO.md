@@ -1,12 +1,12 @@
-# Fast Fatigue Model Integration TODO
+# QoM Transformer Model Integration TODO
 
-## Plan Steps:
-- [x] Step 1: Add FastTemporalTransformer class and load_fast_fatigue_model() to backend/model_utils.py
-- [ ] Step 2: Update backend/app.py - Import new utils, add fast_fatigue_model/fast_fatigue_scaler to ModelStore.load_all(), update health/models_info
-- [ ] Step 3: Add /predict/fast_fatigue and /upload/fast_fatigue endpoints to backend/app.py
-- [ ] Step 4: Delete FastTemporalTransformer.py (standalone stub)
-- [ ] Step 5: Test integration - restart app, check health, test endpoints
-- [ ] Complete
+## Approved Plan Steps:
+- [ ] Step 1: Create backend/preprocessors/qom_preprocessor.py (new file)
+- [x] Step 2: Update backend/model_utils.py
+- [x] Step 3: Update backend/app.py (ModelStore.load_all(), /predict/qom, /upload/qom endpoints)
+- [ ] Step 4: mkdir models/qom/ && cp qom_transformer_model.pth models/qom/
+- [ ] Step 5: Test: python backend/app.py, curl /health (qom_model: true), test endpoints
+- [ ] Step 6: Update frontend (app.js + index.html) for QoM UI
+- [ ] Complete: attempt_completion
 
 **Current progress: Starting Step 1**
-

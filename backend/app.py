@@ -85,6 +85,14 @@ except ImportError as e:
     TEMPORAL_AVAILABLE = False
     print(f"⚠️  Temporal model utils not available: {e}")
 
+# ── QoM Transformer Model ──────────────────────────────────────────────────
+try:
+    from model_utils import load_qom_model
+    QOM_AVAILABLE = True
+except ImportError as e:
+    QOM_AVAILABLE = False
+    print(f"⚠️  QoM model utils not available: {e}")
+
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -188,6 +196,10 @@ class ModelStore:
     dqn_env       = None  # DQN environment (kept for model compatibility)
     temporal_model = None
     temporal_scaler = None
+    qom_model = None
+    qom_scaler = None
+    qom_feature_cols = None
+    qom_seq_length = None
     thresholds   = DEFAULT_THRESHOLDS.copy()
 
     @classmethod
@@ -240,6 +252,17 @@ class ModelStore:
                 log.info("✅ Temporal M3 model + scaler loaded")
             except Exception as e:
                 log.warning(f"⚠️  Temporal M3 model not loaded: {e}")
+
+        # ── QoM Transformer ─────────────────────────────────────────────────
+        try:
+            qom_path = os.path.join(os.path.dirname(__file__), '..', 'models', 'qom', 'qom_transformer_model.pth')
+            if os.path.exists(qom_path):
+                cls.qom_model, cls.qom_scaler, cls.qom_feature_cols, cls.qom_seq_length = load_qom_model(qom_path, device)
+                log.info(f"✅ QoM Transformer loaded (seq_len={cls.qom_seq_length}, feats={len(cls.qom_feature_cols)})")
+            else:
+                log.warning(f"⚠️  QoM model not found: {qom_path}")
+        except Exception as e:
+            log.warning(f"⚠️  QoM Transformer not loaded: {e}")
 
         # ── Bayesian Biomechanics Model ──────────────────────────────────
         if BAYESIAN_AVAILABLE:
@@ -329,9 +352,10 @@ def health():
             'quality_model':    ModelStore.quality_model is not None,
             'coach_model':      ModelStore.coach_model   is not None,
 'dqn_model': ModelStore.dqn_model is not None,
-            'temporal_model': ModelStore.temporal_model is not None,
+'temporal_model': ModelStore.temporal_model is not None,
+            'qom_model': ModelStore.qom_model is not None
         },
-        'thresholds': ModelStore.thresholds,
+        'thresholds': ModelStore.thresholds
     })
 
 
@@ -349,6 +373,12 @@ def models_info():
             'features':       FEATURES_INJURY,
             'n_features':     len(FEATURES_INJURY),
             'asym_threshold': ModelStore.thresholds.get('asym_threshold'),
+        },
+        'qom': {
+            'features': ModelStore.qom_feature_cols or [],
+            'n_features': len(ModelStore.qom_feature_cols) if ModelStore.qom_feature_cols else 0,
+            'seq_length': ModelStore.qom_seq_length or 30,
+            'available': ModelStore.qom_model is not None,
         },
         'dqn': {
             'observation_dim': OBSERVATION_DIM,
@@ -887,6 +917,144 @@ def recommend_from_metrics():
 # ═══════════════════════════════════════════════════════════════════════════
 # API: DQN Coaching Model — CSV Upload
 # ═══════════════════════════════════════════════════════════════════════════
+@app.route('/predict/qom', methods=['POST'])
+def predict_qom():
+    """
+    QoM Transformer prediction - manual input (single sequence).
+    
+    Expects JSON:
+    {
+      "speed_kmh": 20.5,
+      "cadence": 4.2,
+      "stride_length": 2.3,
+      "knee_left": 45.0,
+      "knee_right": 42.0,
+      "hip_left": 20.0,
+      "hip_right": 18.0,
+      "asymmetry_knee": 5.2,
+      "variability": 0.018,
+      "fatigue": 0.3
+    }
+    (Repeated for seq_length rows or full time-series)
+    """
+    if ModelStore.qom_model is None:
+        return jsonify({'error': 'QoM Transformer not loaded'}), 503
+    
+    body = request.get_json(force=True)
+    
+    try:
+        from backend.preprocessors.qom_preprocessor import QoMPreprocessor, interpret_qom
+        from model_utils import predict_qom
+        
+        # Manual input → padded sequence
+        sequence = QoMPreprocessor.prepare_sequence_from_manual(body, ModelStore.qom_seq_length)
+        score = predict_qom(
+            ModelStore.qom_model, ModelStore.qom_scaler, 
+            ModelStore.qom_feature_cols, ModelStore.qom_seq_length,
+            sequence, device
+        )
+        
+        result = interpret_qom(score)
+        result['raw_score'] = score
+        
+        return jsonify({
+            'qom': result,
+            'features_used': {f: float(body.get(f, 0.0)) for f in ModelStore.qom_feature_cols},
+        })
+    
+    except Exception as e:
+        log.exception("QoM prediction error")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/upload/qom', methods=['POST'])
+def upload_qom():
+    """
+    QoM Transformer - CSV upload → sliding window predictions.
+    
+    Expected columns: time (opt), speed_kmh, cadence, stride_length, knee_left,
+    knee_right, hip_left, hip_right, asymmetry_knee, variability, fatigue
+    
+    Returns:
+    {
+      "rows": int,
+      "qom_series": [float, ...],
+      "time_axis": [...],
+      "qom_windows": [{"window_start": i, "window_end": j, "qom": float}, ...],
+      "summary": {max_qom, avg_qom, min_qom}
+    }
+    """
+    if ModelStore.qom_model is None:
+        return jsonify({'error': 'QoM Transformer not loaded'}), 503
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+    
+    file = request.files['file']
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'File type not allowed. Use CSV or Excel.'}), 400
+    
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+    
+    try:
+        from backend.preprocessors.qom_preprocessor import (
+            QoMPreprocessor, predict_multiple_windows, interpret_qom
+        )
+        from model_utils import predict_qom
+        import pandas as pd
+        
+        df = pd.read_csv(filepath)
+        prepared = QoMPreprocessor.prepare_sequence_from_df(df, ModelStore.qom_seq_length)
+        
+        # Single prediction (last window)
+        last_score = predict_qom(
+            ModelStore.qom_model, ModelStore.qom_scaler,
+            ModelStore.qom_feature_cols, ModelStore.qom_seq_length,
+            df, device  # df for full sequence context
+        )
+        
+        # Multiple windows
+        windows = predict_multiple_windows(
+            prepared['sequence'], ModelStore.qom_seq_length, stride=5
+        )
+        qom_series = []
+        for w in windows:
+            score = predict_qom(
+                ModelStore.qom_model, ModelStore.qom_scaler,
+                ModelStore.qom_feature_cols, ModelStore.qom_seq_length,
+                w['sequence'], device
+            )
+            qom_series.append(score)
+            w['qom'] = score
+        
+        time_axis = prepared['time_axis']
+        
+        summary = {
+            'max_qom': max(qom_series),
+            'avg_qom': sum(qom_series)/len(qom_series),
+            'min_qom': min(qom_series),
+            'interpretation': interpret_qom(last_score)
+        }
+        
+        return jsonify({
+            'rows': len(df),
+            'last_qom': last_score,
+            'qom_series': qom_series,
+            'time_axis': time_axis,
+            'qom_windows': windows,
+            'summary': summary,
+            'features': prepared['features']
+        })
+    
+    except Exception as e:
+        log.exception("QoM upload error")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        os.remove(filepath)
+
+
 @app.route('/upload/dqn', methods=['POST'])
 def upload_dqn():
     """

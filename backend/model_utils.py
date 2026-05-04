@@ -113,6 +113,87 @@ def fast_preprocess_sequence(raw_sequence, scaler):
     return torch.FloatTensor(arr_scaled).unsqueeze(0)
 
 def predict_fast_fatigue(model, scaler, raw_sequence, device='cpu'):
+    \"\"\"
+    Predict fatigue from sequence.
+    Returns (fatigue_score, asymmetry_score)
+    \"\"\"
+    model.eval()
+    tensor = fast_preprocess_sequence(raw_sequence, scaler).to(device)
+    with torch.no_grad():
+        fatigue, asym = model(tensor)
+    return fatigue.item(), asym.item()
+
+# ════════════════════════════════════════════════════════════════════════════
+# QoM TRANSFORMER MODEL
+# ════════════════════════════════════════════════════════════════════════════
+
+import torch.nn.functional as F
+from backend.preprocessors.qom_preprocessor import QOM_FEATURES, QOM_SEQ_LENGTH
+
+class SimpleTemporalTransformer(nn.Module):
+    def __init__(self, input_dim=10, d_model=64, nhead=4, num_layers=3, dropout=0.2):
+        super().__init__()
+        self.input_proj = nn.Linear(input_dim, d_model)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=nhead, dropout=dropout, batch_first=True
+        )
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.regressor = nn.Sequential(
+            nn.Linear(d_model, 32),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(32, 1),
+            nn.Sigmoid()
+        )
+    
+    def forward(self, x):
+        x = self.input_proj(x)
+        x = self.transformer(x)
+        x = x.mean(dim=1)
+        return self.regressor(x).squeeze()
+
+def load_qom_model(model_path='qom_transformer_model.pth', device='cpu'):
+    \"\"\"
+    Load QoM Transformer model + metadata.
+    \"\"\"
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    model = SimpleTemporalTransformer(
+        input_dim=checkpoint['input_dim'],
+        d_model=checkpoint['d_model'],
+        nhead=checkpoint['nhead'],
+        num_layers=checkpoint['num_layers']
+    ).to(device)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+    
+    return model, checkpoint['scaler'], checkpoint['feature_cols'], checkpoint['sequence_length']
+
+def qom_preprocess_sequence(raw_sequence, scaler, feature_cols, seq_length):
+    \"\"\"
+    raw_sequence: df or list of dicts → (1, seq_length, 10) tensor
+    \"\"\"
+    if isinstance(raw_sequence, pd.DataFrame):
+        seq_data = [[row.get(col, 0.0) for col in feature_cols] for _, row in raw_sequence.tail(seq_length).iterrows()]
+    else:
+        seq_data = [[row.get(col, 0.0) for col in feature_cols] for row in raw_sequence[-seq_length:]]
+    
+    arr = np.array(seq_data, dtype=np.float32)
+    arr_scaled = scaler.transform(arr)
+    return torch.FloatTensor(arr_scaled).unsqueeze(0)
+
+def predict_qom(model, scaler, feature_cols, seq_length, raw_sequence, device='cpu'):
+    \"\"\"
+    Full QoM prediction pipeline.
+    \"\"\"
+    model.eval()
+    tensor = qom_preprocess_sequence(raw_sequence, scaler, feature_cols, seq_length).to(device)
+    
+    with torch.no_grad():
+        pred = model(tensor).cpu().numpy()
+    
+    return float(pred[0])
     """
     Predict fatigue from sequence.
     Returns (fatigue_score, asymmetry_score)
