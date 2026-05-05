@@ -373,4 +373,3 @@ class FatiguePreprocessor:
             'asymmetry_flag': asym_flag,
             'message': msg
         }
- 

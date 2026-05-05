@@ -1,0 +1,6 @@
+import joblib
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
+pipeline = Pipeline([('scaler', StandardScaler()), ('model', LinearRegression())])
+joblib.dump(pipeline, 'fatigue_pipeline.joblib')
