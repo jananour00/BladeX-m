@@ -107,7 +107,7 @@ except ImportError as e:
 
 # ── Temporal M3 Model ──────────────────────────────────────────────────────
 try:
-from backend.model_utils import (
+    from backend.model_utils import (
         load_temporal_model,
         load_temporal_scaler,
         FEATURES_TEMPORAL_FATIGUE,
@@ -118,9 +118,18 @@ except ImportError as e:
     log.warning(f"⚠️  Temporal model utils not available: {e}")
 
 # ── QoM Transformer Model ──────────────────────────────────────────────────
-from model_utils import load_qom_model, load_cgnn_model
-QOM_AVAILABLE = True
-CGNN_AVAILABLE = True  # Already imported from preprocessor
+try:
+    from backend.model_utils import load_qom_model, load_cgnn_model, predict_qom, predict_cgnn
+    QOM_AVAILABLE = True
+    CGNN_AVAILABLE = True
+except ImportError:
+    def predict_qom(model, scaler, feature_cols, seq_length, data_df, device):
+        return 0.5
+    def predict_cgnn(model, X_scaled, device):
+        return {'fatigue': torch.zeros(1), 'qom': torch.zeros(1), 'injury_risk': torch.zeros(1)}
+    QOM_AVAILABLE = CGNN_AVAILABLE = False
+    load_qom_model = lambda p, d: (None, None, [], 30)
+    load_cgnn_model = lambda p, d: (None, None, [])
 
 
 
