@@ -124,7 +124,7 @@ def load_dqn_model(model_path: str = "paralympic_dqn_model.zip"):
     
     # Load model
     model = DQN.load(model_path, env=wrapped_env)
-    print(f"✅ DQN model loaded from {model_path}")
+    print(f"[OK] DQN model loaded from {model_path}")
     return model, wrapped_env
 
 

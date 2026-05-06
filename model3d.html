@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>⚡ BladeRunner CV — 3D Runner Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --c1:#00e5ff;--c2:#ff6b35;--c3:#76ff03;--c4:#ffd600;--c5:#ff4081;
+  --bg:#080b12;--bg2:#0e1219;--bg3:#141820;--bg4:#1c2230;
+  --border:rgba(0,229,255,0.15);--border2:rgba(0,229,255,0.08);
+  --text:#dce8f5;--muted:#5a6a80;--muted2:#3a4a5c;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Barlow',sans-serif;overflow:hidden}
+
+nav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 28px;background:var(--bg2);border-bottom:1px solid var(--border);
+  position:relative;z-index:100;
+}
+.logo{font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:900;
+  color:var(--c1);letter-spacing:3px;text-transform:uppercase;}
+.logo span{color:var(--c2);}
+.nav-right{display:flex;align-items:center;gap:16px;font-family:'Share Tech Mono';font-size:10px;}
+.back-btn{display:flex;align-items:center;gap:6px;padding:4px 12px;border:1px solid var(--border);
+  border-radius:4px;color:var(--muted);text-decoration:none;letter-spacing:1px;transition:all .2s;}
+.back-btn:hover{border-color:var(--c1);color:var(--c1);background:rgba(0,229,255,.05);}
+.status-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;
+  border:1px solid var(--border);border-radius:4px;color:var(--c3);}
+.dot-pulse{width:6px;height:6px;border-radius:50%;background:var(--c3);animation:pulse 1.5s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+
+.main-layout{
+  display:grid;
+  grid-template-columns:1fr 280px;
+  height:calc(100vh - 52px);
+}
+
+/* 3D Viewport */
+.viewport{
+  position:relative;background:#040608;overflow:hidden;
+}
+#threeCanvas{width:100%;height:100%;display:block;}
+
+/* HUD overlays */
+.hud-corners{position:absolute;inset:12px;pointer-events:none;}
+.corner{position:absolute;width:20px;height:20px;}
+.corner.tl{top:0;left:0;border-top:1.5px solid var(--c1);border-left:1.5px solid var(--c1);}
+.corner.tr{top:0;right:0;border-top:1.5px solid var(--c1);border-right:1.5px solid var(--c1);}
+.corner.bl{bottom:0;left:0;border-bottom:1.5px solid var(--c1);border-left:1.5px solid var(--c1);}
+.corner.br{bottom:0;right:0;border-bottom:1.5px solid var(--c1);border-right:1.5px solid var(--c1);}
+.scan-line{position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--c1),transparent);
+  opacity:.2;animation:scandown 6s linear infinite;pointer-events:none;}
+@keyframes scandown{0%{top:0}100%{top:100%}}
+
+.hud-tl{position:absolute;top:24px;left:24px;font-family:'Share Tech Mono';font-size:10px;color:var(--c1);opacity:.8;line-height:1.8;}
+.hud-tr{position:absolute;top:24px;right:24px;font-family:'Share Tech Mono';font-size:10px;color:var(--c2);text-align:right;line-height:1.8;}
+.hud-bl{position:absolute;bottom:24px;left:24px;font-family:'Share Tech Mono';font-size:9px;color:var(--muted);line-height:1.8;}
+
+/* Ground grid lines */
+.ground-info{position:absolute;bottom:24px;right:24px;font-family:'Share Tech Mono';font-size:9px;color:var(--muted);}
+
+/* Prosthetic badge */
+.pros-hud{
+  position:absolute;top:50%;left:24px;transform:translateY(-50%);
+  background:rgba(255,214,0,.07);border:1px solid rgba(255,214,0,.25);
+  border-radius:6px;padding:10px 14px;font-family:'Share Tech Mono';font-size:9px;
+  color:var(--c4);line-height:2;pointer-events:none;
+}
+.pros-title{font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:4px;color:var(--c4);}
+
+/* Right panel */
+.side-panel{
+  background:var(--bg2);border-left:1px solid var(--border);
+  overflow-y:auto;display:flex;flex-direction:column;
+}
+.side-panel::-webkit-scrollbar{width:3px;}
+.side-panel::-webkit-scrollbar-thumb{background:var(--c1);border-radius:2px;}
+
+.sp-section{padding:14px 16px;border-bottom:1px solid var(--border2);}
+.sp-title{font-family:'Barlow Condensed',sans-serif;font-size:10px;font-weight:600;
+  color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:12px;}
+
+/* Speed display */
+.speed-big{font-family:'Share Tech Mono';font-size:32px;color:var(--c1);
+  text-align:center;letter-spacing:4px;padding:4px 0;}
+.speed-unit{font-size:10px;color:var(--muted);text-align:center;letter-spacing:2px;}
+
+/* Metric cards */
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.metric{background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:8px 12px;}
+.metric.wide{grid-column:span 2;}
+.m-lbl{font-size:9px;color:var(--muted);font-family:'Share Tech Mono';margin-bottom:3px;letter-spacing:.5px;}
+.m-val{font-family:'Share Tech Mono';font-size:15px;font-weight:600;color:var(--c1);}
+.m-val.ok{color:var(--c3);}
+.m-val.warn{color:var(--c4);}
+.bar-wrap{height:3px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;margin-top:4px;}
+.bar-fill{height:100%;border-radius:2px;transition:width .3s;}
+
+/* Controls */
+.controls-section{padding:14px 16px;}
+.ctrl-btn{
+  width:100%;padding:9px;font-family:'Barlow Condensed',sans-serif;font-size:12px;
+  font-weight:700;letter-spacing:1.5px;text-transform:uppercase;
+  border:1px solid var(--border);background:transparent;color:var(--c1);
+  border-radius:5px;cursor:pointer;transition:all .2s;margin-bottom:6px;
+}
+.ctrl-btn:hover{background:rgba(0,229,255,.08);}
+.ctrl-btn.active{background:rgba(0,229,255,.12);border-color:var(--c1);}
+.ctrl-btn.pros{color:var(--c4);border-color:rgba(255,214,0,.3);}
+.ctrl-btn.pros:hover{background:rgba(255,214,0,.07);}
+.ctrl-btn.pros.active{background:rgba(255,214,0,.12);border-color:var(--c4);}
+.ctrl-btn.cam{color:var(--c3);border-color:rgba(118,255,3,.25);}
+.ctrl-btn.cam:hover{background:rgba(118,255,3,.05);}
+
+.slider-row{margin-bottom:10px;}
+.slider-label{display:flex;justify-content:space-between;font-family:'Share Tech Mono';font-size:9px;color:var(--muted);margin-bottom:5px;}
+input[type=range]{width:100%;accent-color:var(--c1);height:3px;cursor:pointer;}
+
+/* Prosthetic detail box */
+.pros-detail{
+  background:rgba(255,214,0,.05);border:1px solid rgba(255,214,0,.2);
+  border-radius:6px;padding:10px;font-family:'Share Tech Mono';font-size:9px;
+  color:var(--c4);line-height:1.9;
+}
+.pros-detail strong{display:block;font-size:10px;letter-spacing:1px;margin-bottom:4px;}
+
+/* Step tracker */
+.step-row{display:flex;align-items:center;gap:8px;margin:4px 0;font-family:'Share Tech Mono';font-size:10px;}
+.step-lbl{width:60px;color:var(--muted);}
+.step-bar{flex:1;height:5px;background:rgba(255,255,255,.07);border-radius:3px;overflow:hidden;}
+.step-fill{height:100%;border-radius:3px;transition:width .2s;}
+
+/* Camera mode label */
+.cam-label{
+  font-family:'Share Tech Mono';font-size:9px;color:var(--muted);
+  text-align:center;padding:4px;letter-spacing:1px;
+}
+
+/* Tag */
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:9px;
+  font-family:'Share Tech Mono';padding:2px 7px;border-radius:3px;
+  background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.2);color:var(--c1);}
+.tag.pros{background:rgba(255,214,0,.07);border-color:rgba(255,214,0,.2);color:var(--c4);}
+
+/* Loading overlay */
+#loadOverlay{
+  position:absolute;inset:0;background:#040608;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;
+  gap:16px;z-index:50;
+}
+.load-logo{font-family:'Barlow Condensed',sans-serif;font-size:28px;font-weight:900;
+  color:var(--c1);letter-spacing:6px;}
+.load-logo span{color:var(--c2);}
+.load-bar-wrap{width:280px;height:2px;background:rgba(255,255,255,.07);border-radius:2px;overflow:hidden;}
+.load-bar{height:100%;background:var(--c1);border-radius:2px;transition:width .1s;}
+.load-status{font-family:'Share Tech Mono';font-size:10px;color:var(--muted);letter-spacing:2px;}
+
+@media(max-width:800px){
+  .main-layout{grid-template-columns:1fr;}
+  .side-panel{display:none;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">⚡ Blade<span>Runner</span> CV</div>
+  <div class="nav-right">
+    <a href="bladerunner_cv.html" class="back-btn">← CV ANALYSIS</a>
+    <div class="status-pill">
+      <div class="dot-pulse"></div>
+      <span id="modelStatus">LOADING</span>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main-layout">
+
+  <!-- 3D VIEWPORT -->
+  <div class="viewport" id="viewport">
+    <canvas id="threeCanvas"></canvas>
+
+    <!-- Loading overlay -->
+    <div id="loadOverlay">
+      <div class="load-logo">⚡ Blade<span>Runner</span></div>
+      <div style="font-family:'Share Tech Mono';font-size:9px;color:var(--muted);letter-spacing:3px;">3D MODEL SYSTEM</div>
+      <div class="load-bar-wrap"><div class="load-bar" id="loadBar" style="width:0%"></div></div>
+      <div class="load-status" id="loadStatus">INITIALIZING ENGINE...</div>
+    </div>
+
+    <!-- HUD overlays -->
+    <div class="hud-corners">
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+    </div>
+    <div class="scan-line"></div>
+
+    <div class="hud-tl">
+      <div>MODEL: RUNNER_3D_v2.1</div>
+      <div id="hudFps">FPS: --</div>
+      <div id="hudPhase">PHASE: STANCE</div>
+    </div>
+    <div class="hud-tr">
+      <div id="hudSpeed">SPEED: 0.00 m/s</div>
+      <div id="hudCadence">CADENCE: -- spm</div>
+      <div id="hudCam">CAM: FOLLOW</div>
+    </div>
+
+    <div class="pros-hud" id="prosHud">
+      <div class="pros-title">◆ PROSTHETIC</div>
+      <div>TYPE: RUNNING BLADE</div>
+      <div>SIDE: RIGHT LEG</div>
+      <div>MODEL: CHEETAH XC</div>
+      <div id="prosLoad">LOAD: --N</div>
+      <div id="prosAngle">ANGLE: --°</div>
+    </div>
+
+    <div class="hud-bl">
+      <div>DRAG: ROTATE | SCROLL: ZOOM | RIGHT: PAN</div>
+      <div id="hudTime">T: 00:00.000</div>
+    </div>
+
+    <div class="ground-info">
+      <div id="stepsCount">STEPS: 0</div>
+      <div id="distCount">DIST: 0.0m</div>
+    </div>
+  </div>
+
+  <!-- SIDE PANEL -->
+  <div class="side-panel">
+
+    <!-- Speed -->
+    <div class="sp-section">
+      <div class="sp-title">Speed</div>
+      <div class="speed-big" id="speedDisplay">0.00</div>
+      <div class="speed-unit">m/s</div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="sp-section">
+      <div class="sp-title">Biomechanics</div>
+      <div class="metric-grid">
+        <div class="metric">
+          <div class="m-lbl">CADENCE</div>
+          <div class="m-val ok" id="cadVal">0</div>
+          <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted)">spm</div>
+        </div>
+        <div class="metric">
+          <div class="m-lbl">STRIDE_L</div>
+          <div class="m-val" id="strideVal">0.0</div>
+          <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted)">m</div>
+        </div>
+        <div class="metric">
+          <div class="m-lbl">GCT_R</div>
+          <div class="m-val warn" id="gctRVal">0</div>
+          <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted)">ms</div>
+        </div>
+        <div class="metric">
+          <div class="m-lbl">GCT_L</div>
+          <div class="m-val ok" id="gctLVal">0</div>
+          <div style="font-family:'Share Tech Mono';font-size:8px;color:var(--muted)">ms</div>
+        </div>
+        <div class="metric wide">
+          <div class="m-lbl">VERT OSCILLATION</div>
+          <div class="m-val" id="vertVal">0.0</div>
+          <div class="bar-wrap"><div class="bar-fill" id="vertBar" style="width:0%;background:var(--c1)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prosthetic -->
+    <div class="sp-section">
+      <div class="sp-title">Prosthetic Blade</div>
+      <div class="pros-detail">
+        <strong>◆ ÖSSUR CHEETAH XC</strong>
+        <div>SIDE · RIGHT TRANSTIBIAL</div>
+        <div id="prosLoadSide">PEAK LOAD · -- N</div>
+        <div id="prosEnergyReturn">ENERGY RETURN · 92%</div>
+        <div id="prosStiffness">STIFFNESS · HIGH</div>
+      </div>
+      <div style="margin-top:10px;">
+        <div class="step-row">
+          <span class="step-lbl">R BLADE</span>
+          <div class="step-bar"><div class="step-fill" id="rBlade" style="width:0%;background:var(--c4)"></div></div>
+        </div>
+        <div class="step-row">
+          <span class="step-lbl">L FOOT</span>
+          <div class="step-bar"><div class="step-fill" id="lFoot" style="width:0%;background:var(--c3)"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-section">
+      <div class="sp-title">Controls</div>
+
+      <div class="slider-row">
+        <div class="slider-label"><span>SPEED</span><span id="speedLbl">5.0 m/s</span></div>
+        <input type="range" id="speedSlider" min="2" max="12" step="0.1" value="5" oninput="setSpeed(this.value)">
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>ANIMATION</span><span id="animLbl">100%</span></div>
+        <input type="range" id="animSlider" min="10" max="200" step="1" value="100" oninput="setAnimSpeed(this.value)">
+      </div>
+
+      <button class="ctrl-btn active" id="runBtn" onclick="toggleRun()">⏸ PAUSE RUN</button>
+      <button class="ctrl-btn pros active" id="prosBtn" onclick="togglePros()">◆ PROSTHETIC ON</button>
+      <button class="ctrl-btn cam" onclick="cycleCam()">⊕ CYCLE CAMERA</button>
+      <button class="ctrl-btn" onclick="resetCam()">↺ RESET VIEW</button>
+
+      <div class="cam-label" id="camLabel">MODE: FOLLOW CAM</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Three.js r128 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+<script>
+// ── SCENE SETUP ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('threeCanvas');
+const vp = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setClearColor(0x040608, 1);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x040608, 0.018);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+camera.position.set(4, 2.5, 6);
+camera.lookAt(0, 1, 0);
+
+function resizeRenderer(){
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resizeRenderer();
+window.addEventListener('resize', resizeRenderer);
+
+// ── LIGHTING ─────────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0x0a1520, 1.2);
+scene.add(ambient);
+
+const dirLight = new THREE.DirectionalLight(0x00e5ff, 1.8);
+dirLight.position.set(5, 12, 5);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 0.1;
+dirLight.shadow.camera.far = 40;
+dirLight.shadow.camera.left = -6;
+dirLight.shadow.camera.right = 6;
+dirLight.shadow.camera.top = 6;
+dirLight.shadow.camera.bottom = -6;
+scene.add(dirLight);
+
+const rimLight = new THREE.DirectionalLight(0xff6b35, 0.9);
+rimLight.position.set(-5, 4, -3);
+scene.add(rimLight);
+
+const fillLight = new THREE.PointLight(0x76ff03, 0.4, 20);
+fillLight.position.set(0, 1, -4);
+scene.add(fillLight);
+
+// ── GROUND ────────────────────────────────────────────────────────────────────
+const groundGeo = new THREE.PlaneGeometry(60, 60, 40, 40);
+const groundMat = new THREE.MeshStandardMaterial({
+  color: 0x080c14, roughness: 0.9, metalness: 0.1,
+  wireframe: false,
+});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid lines on ground
+const gridHelper = new THREE.GridHelper(60, 40, 0x00e5ff, 0x0e1825);
+gridHelper.material.opacity = 0.18;
+gridHelper.material.transparent = true;
+scene.add(gridHelper);
+
+// Track lines
+function makeTrackLine(z){
+  const geo = new THREE.PlaneGeometry(60, 0.04);
+  const mat = new THREE.MeshBasicMaterial({color: 0x00e5ff, transparent:true, opacity:0.12});
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.x = -Math.PI/2;
+  m.position.set(0, 0.001, z);
+  scene.add(m);
+}
+[-0.4, 0.4].forEach(makeTrackLine);
+
+// ── RUNNER MODEL (procedural) ─────────────────────────────────────────────────
+const runnerGroup = new THREE.Group();
+scene.add(runnerGroup);
+
+const skinMat = new THREE.MeshStandardMaterial({color:0xc4856a, roughness:0.7, metalness:0.05});
+const clothMat = new THREE.MeshStandardMaterial({color:0x0d1a2e, roughness:0.85});
+const shoeMatL = new THREE.MeshStandardMaterial({color:0xdddddd, roughness:0.6, metalness:0.1});
+const bladeMat = new THREE.MeshStandardMaterial({color:0x222830, roughness:0.3, metalness:0.85,
+  emissive:0xffd600, emissiveIntensity:0.08});
+const bladeAccent = new THREE.MeshStandardMaterial({color:0xffd600, roughness:0.4, metalness:0.9,
+  emissive:0xffd600, emissiveIntensity:0.3});
+
+function box(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0){
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z);
+  m.rotation.set(rx,ry,rz);
+  m.castShadow = true;
+  return m;
+}
+function cyl(rt,rb,h,mat,x,y,z,rx=0,ry=0,rz=0){
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,12), mat);
+  m.position.set(x,y,z);
+  m.rotation.set(rx,ry,rz);
+  m.castShadow = true;
+  return m;
+}
+function sph(r,mat,x,y,z){
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r,12,12), mat);
+  m.position.set(x,y,z);
+  m.castShadow = true;
+  return m;
+}
+
+// Torso
+const torso = new THREE.Group();
+torso.add(box(0.38,0.52,0.22, clothMat, 0,0,0));
+torso.add(box(0.36,0.22,0.20, skinMat, 0,0.37,0)); // chest exposed
+runnerGroup.add(torso);
+torso.position.set(0, 1.3, 0);
+
+// Head
+const head = new THREE.Group();
+head.add(sph(0.14, skinMat, 0, 0, 0));
+head.add(box(0.16,0.06,0.14, new THREE.MeshStandardMaterial({color:0x111820}), 0,0.04,0)); // hair
+runnerGroup.add(head);
+head.position.set(0, 1.9, 0);
+
+// Arms
+const armLGroup = new THREE.Group();
+armLGroup.add(cyl(0.06,0.05,0.35, skinMat, 0,-0.175,0));  // upper
+armLGroup.add(cyl(0.05,0.04,0.32, skinMat, 0,-0.51,0));    // lower
+armLGroup.add(sph(0.06, skinMat, 0,-0.68,0));              // hand
+armLGroup.position.set(-0.24, 1.52, 0);
+runnerGroup.add(armLGroup);
+
+const armRGroup = new THREE.Group();
+armRGroup.add(cyl(0.06,0.05,0.35, skinMat, 0,-0.175,0));
+armRGroup.add(cyl(0.05,0.04,0.32, skinMat, 0,-0.51,0));
+armRGroup.add(sph(0.06, skinMat, 0,-0.68,0));
+armRGroup.position.set(0.24, 1.52, 0);
+runnerGroup.add(armRGroup);
+
+// ── LEFT LEG (natural) ────────────────────────────────────────────────────────
+const legLGroup = new THREE.Group();
+const thighL = cyl(0.09,0.08,0.46, clothMat, 0,-0.23,0);
+const shinL  = cyl(0.07,0.06,0.42, skinMat,  0,-0.67,0);
+const footL  = new THREE.Mesh(new THREE.BoxGeometry(0.14,0.08,0.28), shoeMatL);
+footL.position.set(0,-0.92,0.07);
+footL.castShadow = true;
+legLGroup.add(thighL, shinL, footL);
+legLGroup.position.set(-0.12, 1.12, 0);
+runnerGroup.add(legLGroup);
+
+// ── RIGHT LEG (prosthetic blade) ──────────────────────────────────────────────
+const legRGroup = new THREE.Group();
+const thighR  = cyl(0.09,0.08,0.46, clothMat, 0,-0.23,0);
+const shinR   = cyl(0.07,0.06,0.32, skinMat,  0,-0.55,0); // shorter (amputee)
+
+// Socket / cup at bottom of shin
+const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.075,0.065,0.10,12), bladeMat);
+socket.position.set(0,-0.73,0);
+socket.castShadow = true;
+
+// Blade — C-shape approximated with curved segments
+const bladeGroup = new THREE.Group();
+bladeGroup.position.set(0,-0.79,0);
+
+// Main blade body — angled C-shape using boxes
+const bl1 = box(0.04, 0.38, 0.03, bladeMat, 0,-0.19,0, 0.18,0,0);           // vertical
+const bl2 = box(0.04, 0.25, 0.03, bladeMat, 0,-0.36,0.08, 0.5,0,0);          // curve
+const bl3 = box(0.04, 0.05, 0.20, bladeMat, 0,-0.43,0.16, 0,0,0);            // toe
+bl1.material = bladeMat;bl2.material=bladeMat;bl3.material=bladeMat;
+
+// Gold accents on blade
+const acc1 = box(0.041,0.38,0.005, bladeAccent, 0.022,-0.19,0, 0.18,0,0);
+const acc2 = box(0.041,0.25,0.005, bladeAccent, 0.022,-0.36,0.08, 0.5,0,0);
+
+bladeGroup.add(bl1,bl2,bl3,acc1,acc2);
+
+legRGroup.add(thighR, shinR, socket, bladeGroup);
+legRGroup.position.set(0.12, 1.12, 0);
+runnerGroup.add(legRGroup);
+
+// Glow effect for blade
+const bladeGlow = new THREE.PointLight(0xffd600, 0.6, 1.2);
+bladeGlow.position.set(0.12, 0.3, 0);
+runnerGroup.add(bladeGlow);
+
+// ── EXHAUST / MOTION PARTICLES ────────────────────────────────────────────────
+const particleCount = 80;
+const pGeom = new THREE.BufferGeometry();
+const pPos = new Float32Array(particleCount * 3);
+const pVel = [];
+for(let i=0;i<particleCount;i++){
+  pPos[i*3]   = (Math.random()-0.5)*0.4;
+  pPos[i*3+1] = Math.random()*1.5;
+  pPos[i*3+2] = Math.random()*-2;
+  pVel.push({x:(Math.random()-.5)*.02, y:Math.random()*0.01-.005, z:-Math.random()*0.08-0.02, life:Math.random()});
+}
+pGeom.setAttribute('position', new THREE.BufferAttribute(pPos,3));
+const pMat = new THREE.PointsMaterial({color:0x00e5ff,size:0.04,transparent:true,opacity:0.4,
+  blending:THREE.AdditiveBlending,depthWrite:false});
+const particles = new THREE.Points(pGeom, pMat);
+scene.add(particles);
+
+// ── ORBIT CONTROLS (manual) ───────────────────────────────────────────────────
+let isDragging=false, isRightDrag=false;
+let prevMouse={x:0,y:0};
+let camTheta=0.6, camPhi=0.35, camRadius=6, camTarget=new THREE.Vector3(0,1,0);
+let camMode=0; // 0=follow, 1=side, 2=front, 3=free
+const camModes=['FOLLOW','SIDE','FRONT','FREE'];
+const camLabels=['MODE: FOLLOW CAM','MODE: SIDE VIEW','MODE: FRONT CAM','MODE: FREE ORBIT'];
+
+vp.addEventListener('mousedown',e=>{isDragging=true;isRightDrag=e.button===2;prevMouse={x:e.clientX,y:e.clientY};});
+vp.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('mouseup',()=>{isDragging=false;});
+window.addEventListener('mousemove',e=>{
+  if(!isDragging||camMode!==3) return;
+  const dx=(e.clientX-prevMouse.x)*0.008;
+  const dy=(e.clientY-prevMouse.y)*0.008;
+  if(isRightDrag){camTarget.x-=dx*2;camTarget.y+=dy*2;}
+  else{camTheta-=dx;camPhi=Math.max(0.05,Math.min(1.5,camPhi-dy));}
+  prevMouse={x:e.clientX,y:e.clientY};
+});
+vp.addEventListener('wheel',e=>{
+  camRadius=Math.max(1.5,Math.min(20,camRadius+e.deltaY*0.01));
+  e.preventDefault();
+},{passive:false});
+
+// Touch
+let lastTouch=null;
+vp.addEventListener('touchstart',e=>{lastTouch=e.touches[0];});
+vp.addEventListener('touchmove',e=>{
+  if(!lastTouch||camMode!==3) return;
+  const t=e.touches[0];
+  const dx=(t.clientX-lastTouch.clientX)*0.01;
+  const dy=(t.clientY-lastTouch.clientY)*0.01;
+  camTheta-=dx; camPhi=Math.max(0.05,Math.min(1.5,camPhi-dy));
+  lastTouch=t;e.preventDefault();
+},{passive:false});
+
+// ── ANIMATION STATE ───────────────────────────────────────────────────────────
+let running=true, showPros=true;
+let speed=5.0, animSpeed=1.0;
+let t=0, steps=0, dist=0;
+let lastStepT=0;
+let fps=0, fpsCount=0, fpsLast=performance.now();
+
+// Sinusoidal gait helpers
+function sin(x){return Math.sin(x);}
+function cos(x){return Math.cos(x);}
+
+// ── MAIN ANIMATION LOOP ───────────────────────────────────────────────────────
+let lastTime=0;
+function animate(now){
+  requestAnimationFrame(animate);
+
+  const dt=Math.min((now-lastTime)/1000, 0.05);
+  lastTime=now;
+
+  // FPS counter
+  fpsCount++;
+  if(now-fpsLast>500){
+    fps=Math.round(fpsCount/((now-fpsLast)/1000));
+    fpsCount=0;fpsLast=now;
+  }
+
+  if(running){
+    t += dt * animSpeed * (speed/5);
+    dist += speed * dt;
+    // Step detection
+    const stepInterval = 60/(speed*18); // rough cadence
+    if(t-lastStepT > stepInterval){lastStepT=t;steps++;}
+  }
+
+  // ── GAIT ANIMATION ───────────────────────────────────────────────────────
+  const freq = speed * 1.1; // stride frequency
+  const phase = t * freq;
+
+  // Torso bob + lean
+  torso.position.y = 1.3 + sin(phase*2)*0.022;
+  torso.rotation.z = sin(phase)*0.04;
+  torso.rotation.x = -0.08; // forward lean
+
+  // Head
+  head.position.y = 1.9 + sin(phase*2)*0.022;
+  head.rotation.z = sin(phase)*0.02;
+
+  // Arms (opposite to legs)
+  armLGroup.rotation.x = sin(phase)*0.9;
+  armLGroup.rotation.z = -0.06 + sin(phase)*0.05;
+  armRGroup.rotation.x = -sin(phase)*0.9;
+  armRGroup.rotation.z = 0.06 - sin(phase)*0.05;
+
+  // Left leg (natural)
+  const lThigh = sin(phase+Math.PI)*1.0;
+  const lKnee  = Math.max(0, -sin(phase+Math.PI))*1.4;
+  legLGroup.rotation.x = lThigh;
+  shinL.rotation.x     = lKnee;
+  footL.rotation.x     = -lKnee*0.3 + 0.1;
+
+  // Right leg (prosthetic)
+  const rThigh = sin(phase)*1.0;
+  const rKnee  = Math.max(0, -sin(phase))*1.1; // slightly different
+  legRGroup.rotation.x = rThigh;
+  shinR.rotation.x     = rKnee;
+
+  // Blade angle & glow
+  const bladeAngle = rKnee*0.6 - 0.1;
+  bladeGroup.rotation.x = bladeAngle;
+  const bladeLoad = Math.max(0, sin(phase+0.3));
+  bladeGlow.intensity = showPros ? 0.3 + bladeLoad*0.8 : 0;
+  bladeGroup.visible = showPros;
+  socket.visible = showPros;
+
+  // Ground contact detection for step flash
+  const rContact = Math.max(0, sin(phase+0.3));
+  const lContact = Math.max(0, sin(phase+Math.PI+0.3));
+
+  // Update runner X position (treadmill effect — runner stays, world moves)
+  // Keep runner centred, move grid instead
+  gridHelper.position.z = (dist % 1.5);
+  particles.position.z = (dist % 1.5);
+
+  // ── PARTICLES ───────────────────────────────────────────────────────────
+  const positions = pGeom.attributes.position.array;
+  for(let i=0;i<particleCount;i++){
+    const v=pVel[i];
+    if(running){
+      positions[i*3]   += v.x;
+      positions[i*3+1] += v.y;
+      positions[i*3+2] += v.z;
+      v.life -= 0.015;
+    }
+    if(v.life<=0||positions[i*3+2]<-3){
+      positions[i*3]   = (Math.random()-.5)*0.3;
+      positions[i*3+1] = Math.random()*1.2+0.1;
+      positions[i*3+2] = (Math.random()-.5)*0.1;
+      v.x=(Math.random()-.5)*.015;v.y=(Math.random()*.01-.005);v.z=-Math.random()*.07-.01;
+      v.life=0.8+Math.random()*0.6;
+    }
+  }
+  pGeom.attributes.position.needsUpdate=true;
+  pMat.opacity = running ? 0.35 : 0.1;
+
+  // ── CAMERA ───────────────────────────────────────────────────────────────
+  const camY = runnerGroup.position.y;
+  if(camMode===0){ // follow
+    camera.position.lerp(new THREE.Vector3(4,2.5,6), 0.05);
+    camera.lookAt(0,1.2,0);
+  } else if(camMode===1){ // side
+    camera.position.lerp(new THREE.Vector3(6,1.4,0), 0.05);
+    camera.lookAt(0,1,0);
+  } else if(camMode===2){ // front
+    camera.position.lerp(new THREE.Vector3(0,1.4,5.5), 0.05);
+    camera.lookAt(0,1,0);
+  } else { // free
+    const cx = camTarget.x + camRadius*Math.sin(camTheta)*Math.cos(camPhi);
+    const cy = camTarget.y + camRadius*Math.sin(camPhi);
+    const cz = camTarget.z + camRadius*Math.cos(camTheta)*Math.cos(camPhi);
+    camera.position.set(cx,cy,cz);
+    camera.lookAt(camTarget);
+  }
+
+  // ── HUD UPDATE ────────────────────────────────────────────────────────────
+  const cadence = Math.round(speed*18);
+  const strideLen = (speed*60/cadence).toFixed(2);
+  const gctR = Math.round(220 - speed*8); // prosthetic shorter GCT
+  const gctL = Math.round(240 - speed*7);
+  const vertOsc = (speed*0.8+2).toFixed(1);
+  const ms = (t%1000).toFixed(0).padStart(3,'0');
+  const sec= Math.floor(t%60).toString().padStart(2,'0');
+  const min= Math.floor(t/60).toString().padStart(2,'0');
+
+  document.getElementById('hudFps').textContent  = `FPS: ${fps}`;
+  document.getElementById('hudSpeed').textContent= `SPEED: ${speed.toFixed(2)} m/s`;
+  document.getElementById('hudCadence').textContent=`CADENCE: ${cadence} spm`;
+  document.getElementById('hudCam').textContent  = `CAM: ${camModes[camMode]}`;
+  document.getElementById('hudTime').textContent = `T: ${min}:${sec}.${ms}`;
+  document.getElementById('hudPhase').textContent= rContact>0.5?'PHASE: STANCE':'PHASE: SWING';
+  document.getElementById('stepsCount').textContent=`STEPS: ${steps}`;
+  document.getElementById('distCount').textContent =`DIST: ${dist.toFixed(1)}m`;
+  document.getElementById('prosLoad').textContent  =`LOAD: ${Math.round(rContact*1800+400)}N`;
+  document.getElementById('prosAngle').textContent =`ANGLE: ${Math.round(bladeAngle*57.3)}°`;
+
+  document.getElementById('speedDisplay').textContent=speed.toFixed(2);
+  document.getElementById('cadVal').textContent  =cadence;
+  document.getElementById('strideVal').textContent=strideLen;
+  document.getElementById('gctRVal').textContent =gctR;
+  document.getElementById('gctLVal').textContent =gctL;
+  document.getElementById('vertVal').textContent =vertOsc;
+  document.getElementById('vertBar').style.width =(vertOsc/12*100)+'%';
+  document.getElementById('prosLoadSide').textContent=`PEAK LOAD · ${Math.round(speed*220+400)} N`;
+  document.getElementById('rBlade').style.width  =(rContact*100)+'%';
+  document.getElementById('lFoot').style.width   =(lContact*100)+'%';
+  document.getElementById('modelStatus').textContent='LIVE';
+
+  renderer.render(scene, camera);
+}
+
+// ── CONTROLS ─────────────────────────────────────────────────────────────────
+function toggleRun(){
+  running=!running;
+  const btn=document.getElementById('runBtn');
+  btn.textContent= running ? '⏸ PAUSE RUN' : '▶ RESUME RUN';
+  btn.classList.toggle('active', running);
+}
+function togglePros(){
+  showPros=!showPros;
+  const btn=document.getElementById('prosBtn');
+  btn.textContent= showPros ? '◆ PROSTHETIC ON' : '◇ PROSTHETIC OFF';
+  btn.classList.toggle('active', showPros);
+  document.getElementById('prosHud').style.opacity= showPros?'1':'0.3';
+}
+function setSpeed(v){
+  speed=parseFloat(v);
+  document.getElementById('speedLbl').textContent=speed.toFixed(1)+' m/s';
+}
+function setAnimSpeed(v){
+  animSpeed=v/100;
+  document.getElementById('animLbl').textContent=v+'%';
+}
+function cycleCam(){
+  camMode=(camMode+1)%4;
+  document.getElementById('camLabel').textContent=camLabels[camMode];
+  document.getElementById('hudCam').textContent='CAM: '+camModes[camMode];
+}
+function resetCam(){
+  camTheta=0.6;camPhi=0.35;camRadius=6;
+  camTarget.set(0,1,0);
+}
+
+// ── FAKE LOADING ─────────────────────────────────────────────────────────────
+let loadProgress=0;
+const loadInterval=setInterval(()=>{
+  loadProgress+=Math.random()*18+5;
+  const statuses=['INITIALIZING ENGINE...','LOADING GEOMETRY...','APPLYING TEXTURES...','BUILDING SKELETON...','CALIBRATING BLADE...','READY'];
+  const idx=Math.min(Math.floor(loadProgress/20), statuses.length-1);
+  document.getElementById('loadBar').style.width=Math.min(loadProgress,100)+'%';
+  document.getElementById('loadStatus').textContent=statuses[idx];
+  if(loadProgress>=100){
+    clearInterval(loadInterval);
+    setTimeout(()=>{
+      const ov=document.getElementById('loadOverlay');
+      ov.style.transition='opacity .5s';ov.style.opacity='0';
+      setTimeout(()=>ov.remove(),500);
+    },300);
+  }
+},120);
+
+// ── START ────────────────────────────────────────────────────────────────────
+animate(0);
+</script>
+</body>
+</html>

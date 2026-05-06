@@ -127,21 +127,38 @@ class FatiguePreprocessor:
     def _engineer_features(data: dict) -> dict:
         """
         Derives all model features from raw input.
- 
+
         NOTE: Rolling features (roll_*) require time-series data.
-        For single-row manual input, they default to 0 (no history).
+        For single-row manual input, they are estimated from the
+        current values to approximate training-data distributions.
         For CSV upload with multiple rows, they are computed properly.
+
+        ANGLE CONVENTION: The model was trained on extension angles
+        (knee ~169°, hip ~179°).  Frontend sends flexion angles
+        (knee ~40-60°, hip ~15-25°).  Values < 90° are auto-converted
+        to extension angles via:  extension = 180 - flexion.
         """
         out = dict(data)  # Start with raw values
- 
+
         # ── Prosthetic side decomposition ────────────────────────────
         side = str(data.get('prosthetic_side', 'right')).lower()
- 
+
         knee_left  = float(data.get('knee_left',  data.get('knee_prosthetic', np.nan)))
         knee_right = float(data.get('knee_right', data.get('knee_sound',      np.nan)))
         hip_left   = float(data.get('hip_left',   data.get('hip_prosthetic',  np.nan)))
         hip_right  = float(data.get('hip_right',  data.get('hip_sound',       np.nan)))
- 
+
+        # Auto-convert flexion → extension if angles are clearly flexion (<90°)
+        # Training data: knee mean ~169°, hip mean ~179°
+        if not np.isnan(knee_left) and knee_left < 90:
+            knee_left = 180.0 - knee_left
+        if not np.isnan(knee_right) and knee_right < 90:
+            knee_right = 180.0 - knee_right
+        if not np.isnan(hip_left) and hip_left < 90:
+            hip_left = 180.0 - hip_left
+        if not np.isnan(hip_right) and hip_right < 90:
+            hip_right = 180.0 - hip_right
+
         if side == 'right':
             out['knee_prosthetic'] = knee_right
             out['knee_sound']      = knee_left
@@ -152,41 +169,66 @@ class FatiguePreprocessor:
             out['knee_sound']      = knee_right
             out['hip_prosthetic']  = hip_left
             out['hip_sound']       = hip_right
- 
+
         # ── Derived features ─────────────────────────────────────────
         kp = out.get('knee_prosthetic', np.nan)
         ks = out.get('knee_sound',      np.nan)
- 
+
         out['asymmetry_ratio'] = float(ks) / (float(kp) + 1e-6) if not np.isnan(kp) else np.nan
- 
+
         weight = float(data.get('weight_kg', np.nan))
         height = float(data.get('height_cm', np.nan))
         if not (np.isnan(weight) or np.isnan(height)) and height > 0:
             out['bmi'] = weight / ((height / 100) ** 2)
         else:
             out['bmi'] = np.nan
- 
-        # ── Rolling features: 0 for single-row input ─────────────────
-        # These are meaningful only when processing a time-series CSV.
-        # For manual input, 0 means "no history available".
-        for col in ['roll_speed_mean', 'roll_speed_std',
-                    'roll_knee_std', 'roll_hip_std',
-                    'roll_knee_std_w5', 'roll_hip_std_w5',
-                    'roll_variability_std']:
-            if col not in out:
-                out[col] = 0.0
- 
-        if 'cumulative_impact' not in out:
-            out['cumulative_impact'] = 0.0
- 
+
+        # ── Rolling feature estimation for single-row input ──────────
+        # Training data statistics (from StandardScaler):
+        #   roll_speed_mean:   mean=9.39,  std=1.46
+        #   roll_speed_std:    mean=0.048, std=0.098
+        #   roll_knee_std:     mean=3.52,  std=1.17
+        #   roll_hip_std:      mean=3.51,  std=1.11
+        #   roll_knee_std_w5:  mean=1.35,  std=0.63
+        #   roll_hip_std_w5:   mean=1.73,  std=0.88
+        #   roll_variability:  mean=0.002, std=0.0003
+        #   cumulative_impact: mean=0.48,  std=0.30
+        #
+        # For single-row input, estimate these from current values
+        # so the model receives inputs in the trained distribution.
+        speed = float(out.get('speed', 0))
+        variability = float(out.get('variability', 0.02))
+
+        if 'roll_speed_mean' not in out or out.get('roll_speed_mean', 0) == 0:
+            out['roll_speed_mean'] = speed  # best single-row estimate
+        if 'roll_speed_std' not in out or out.get('roll_speed_std', 0) == 0:
+            # Higher speed → more variation in training data
+            out['roll_speed_std'] = 0.02 + speed * 0.005
+        if 'roll_knee_std' not in out or out.get('roll_knee_std', 0) == 0:
+            # Scale with speed: faster running → more knee angle variation
+            out['roll_knee_std'] = 2.0 + speed * 0.2
+        if 'roll_hip_std' not in out or out.get('roll_hip_std', 0) == 0:
+            out['roll_hip_std'] = 2.0 + speed * 0.2
+        if 'roll_knee_std_w5' not in out or out.get('roll_knee_std_w5', 0) == 0:
+            out['roll_knee_std_w5'] = 0.8 + speed * 0.08
+        if 'roll_hip_std_w5' not in out or out.get('roll_hip_std_w5', 0) == 0:
+            out['roll_hip_std_w5'] = 1.0 + speed * 0.1
+        if 'roll_variability_std' not in out or out.get('roll_variability_std', 0) == 0:
+            out['roll_variability_std'] = variability * 0.1
+
+        if 'cumulative_impact' not in out or out.get('cumulative_impact', 0) == 0:
+            # Estimate from speed: faster → more cumulative load
+            # Normalized 0-1, with speed ~9.4 → ~0.5 (training mean)
+            out['cumulative_impact'] = min(1.0, speed / 18.0)
+
         if 'symmetry_decay' not in out:
             out['symmetry_decay'] = 0.0
- 
+
         if 'asymmetry_stride' not in out:
             kp_v = out.get('knee_prosthetic', np.nan)
             ks_v = out.get('knee_sound', np.nan)
             out['asymmetry_stride'] = abs(float(kp_v) - float(ks_v)) if not (np.isnan(kp_v) or np.isnan(ks_v)) else 0.0
- 
+
         return out
  
     # ──────────────────────────────────────────────────────────────────
@@ -297,35 +339,45 @@ class FatiguePreprocessor:
     def interpret_fatigue(fatigue_score: float, threshold: float) -> dict:
         """
         Converts raw fatigue score to risk level + display info.
- 
+
+        Clinical breakpoints (absolute, not threshold-relative):
+          Low:      < 0.3   (under 30% fatigue)
+          Moderate: 0.3–0.6 (30–60% fatigue — monitor closely)
+          High:     >= 0.6  (above 60% — recommend intervention)
+
         Returns:
             {
               'level': 'Low' | 'Moderate' | 'High',
               'color': CSS color string,
               'icon':  emoji,
               'message': clinical interpretation,
-              'score': 0-100 percentage
+              'score': raw score,
+              'score_pct': 0-100 percentage,
+              'threshold_pct': threshold as percentage
             }
         """
         score_pct = round(float(fatigue_score) * 100, 1)
- 
-        if fatigue_score < threshold * 0.7:
+        thresh_pct = round(threshold * 100, 1)
+
+        if fatigue_score < 0.3:
             return {
                 'level': 'Low',
                 'color': '#22c55e',
                 'icon': '✅',
                 'message': 'Fatigue levels within normal range. Performance maintained.',
-                'score': score_pct,
-                'threshold_pct': round(threshold * 100, 1)
+                'score': float(fatigue_score),
+                'score_pct': score_pct,
+                'threshold_pct': thresh_pct
             }
-        elif fatigue_score < threshold:
+        elif fatigue_score < 0.6:
             return {
                 'level': 'Moderate',
                 'color': '#f59e0b',
                 'icon': '⚠️',
-                'message': 'Approaching fatigue threshold. Monitor closely.',
-                'score': score_pct,
-                'threshold_pct': round(threshold * 100, 1)
+                'message': 'Moderate fatigue detected. Monitor gait patterns and consider pacing.',
+                'score': float(fatigue_score),
+                'score_pct': score_pct,
+                'threshold_pct': thresh_pct
             }
         else:
             return {
@@ -333,8 +385,9 @@ class FatiguePreprocessor:
                 'color': '#ef4444',
                 'icon': '🚨',
                 'message': 'High fatigue detected. Recommend rest or intervention.',
-                'score': score_pct,
-                'threshold_pct': round(threshold * 100, 1)
+                'score': float(fatigue_score),
+                'score_pct': score_pct,
+                'threshold_pct': thresh_pct
             }
  
     @staticmethod

@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Runner · Sensor Simulation (Start / Stop)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Barlow+Condensed:wght@300;400;600;700;900&display=swap');
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none; /* avoid accidental text selection on drag */
+  }
+
+  :root {
+    --bg: #080a0d;
+    --c-lumbar: #1fd9a4;
+    --c-knee: #4a9eff;
+    --c-ankle: #f0a020;
+    --c-shoulder: #c87bff;
+    --c-insole: #ff4d4d;
+    --muted: rgba(255,255,255,0.38);
+    --glow: rgba(31,217,164,0.3);
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: var(--bg);
+    overflow: hidden;
+    font-family: 'Space Mono', monospace;
+  }
+
+  /* fullscreen 3d viewport */
+  #root {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background: var(--bg);
+  }
+
+  #vp {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: radial-gradient(circle at 30% 20%, #0a0e14, #050708);
+  }
+
+  #three-canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  /* hints overlay */
+  #drag-hint {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(4px);
+    padding: 4px 10px;
+    border-radius: 40px;
+    pointer-events: none;
+    z-index: 10;
+    font-family: 'Space Mono', monospace;
+  }
+
+  #click-hint {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    font-size: 10px;
+    color: var(--muted);
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(4px);
+    padding: 5px 12px;
+    border-radius: 32px;
+    pointer-events: none;
+    letter-spacing: 0.08em;
+    z-index: 10;
+    transition: opacity 0.2s;
+  }
+
+  /* START / STOP BUTTON (elegant, floating) */
+  .sim-control {
+    position: absolute;
+    bottom: 24px;
+    right: 24px;
+    z-index: 30;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    background: rgba(12, 15, 19, 0.75);
+    backdrop-filter: blur(12px);
+    border-radius: 60px;
+    padding: 6px 10px 6px 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+    transition: all 0.2s;
+  }
+
+  .sim-status {
+    font-size: 11px;
+    font-family: 'Space Mono', monospace;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.7);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  .sim-status span {
+    color: #1fd9a4;
+    font-weight: 700;
+  }
+
+  .ctrl-btn {
+    background: rgba(20, 25, 32, 0.8);
+    border: none;
+    width: 44px;
+    height: 44px;
+    border-radius: 44px;
+    cursor: pointer;
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255,255,255,0.2);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  }
+
+  .ctrl-btn:hover {
+    background: #1fd9a4;
+    color: #0c0f13;
+    border-color: #1fd9a4;
+    transform: scale(1.02);
+    box-shadow: 0 0 12px rgba(31,217,164,0.5);
+  }
+
+  .ctrl-btn:active {
+    transform: scale(0.96);
+  }
+
+  /* sensor modal (unchanged elegance) */
+  #sensor-modal {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.78);
+    backdrop-filter: blur(12px);
+  }
+
+  #sensor-modal.open {
+    display: flex;
+  }
+
+  .modal-box {
+    background: #0e1117;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 24px;
+    width: min(640px, 90vw);
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 25px 45px rgba(0,0,0,0.6);
+    animation: modalIn 0.22s ease;
+    font-family: 'Space Mono', monospace;
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.94) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 22px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.07);
+    position: sticky;
+    top: 0;
+    background: #0e1117;
+    z-index: 2;
+  }
+
+  .modal-header-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--modal-accent);
+    box-shadow: 0 0 12px var(--modal-accent);
+  }
+
+  .modal-header h2 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--modal-accent);
+    flex: 1;
+  }
+
+  .modal-close {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.5);
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 30px;
+    transition: all 0.2s;
+  }
+
+  .modal-close:hover {
+    background: rgba(255,255,255,0.08);
+    color: white;
+  }
+
+  .modal-body {
+    padding: 20px 22px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .modal-image {
+    width: 100%;
+    border-radius: 16px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.07);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 170px;
+  }
+
+  .modal-image svg {
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+  }
+
+  .modal-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-box {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 10px 8px;
+    text-align: center;
+  }
+
+  .stat-box-label {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .stat-box-val {
+    font-size: 20px;
+    font-weight: 700;
+    font-family: 'Space Mono', monospace;
+    color: var(--modal-accent);
+  }
+
+  .modal-chart-wrap {
+    background: rgba(0,0,0,0.35);
+    border-radius: 16px;
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+
+  .modal-chart-title {
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+  }
+
+  .modal-chart {
+    width: 100%;
+    height: 70px;
+    display: block;
+  }
+
+  .modal-desc {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.65;
+  }
+
+  .modal-mount {
+    display: flex;
+    gap: 12px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 14px;
+    padding: 12px 16px;
+    border-left: 3px solid var(--modal-accent);
+  }
+
+  .modal-mount-icon {
+    font-size: 18px;
+  }
+
+  .modal-mount-text {
+    font-size: 10px;
+    color: rgba(255,255,255,0.55);
+    line-height: 1.55;
+  }
+
+  /* scrollbar */
+  .modal-box::-webkit-scrollbar {
+    width: 4px;
+  }
+  .modal-box::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .modal-box::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.15);
+    border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="vp">
+    <canvas id="three-canvas"></canvas>
+    <div id="drag-hint">⟳ Drag to rotate · Scroll zoom</div>
+    <div id="click-hint">🔍 Click any sensor to inspect</div>
+  </div>
+
+  <!-- START/STOP UI (replaces dashboard) -->
+  <div class="sim-control">
+    <div class="sim-status">
+      <span id="sim-state-label">● RUNNING</span>
+    </div>
+    <button class="ctrl-btn" id="toggle-sim-btn" aria-label="Start/Stop Simulation">⏸</button>
+  </div>
+
+  <!-- Sensor modal (full details) -->
+  <div id="sensor-modal">
+    <div class="modal-box" id="modal-box">
+      <div class="modal-header">
+        <div class="modal-header-dot" id="modal-header-dot"></div>
+        <h2 id="modal-title">Lumbar IMU</h2>
+        <button class="modal-close" id="modal-close-btn">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-image" id="modal-image"></div>
+        <div class="modal-stats" id="modal-stats"></div>
+        <div class="modal-chart-wrap">
+          <div class="modal-chart-title">Live Signal — last 60 frames</div>
+          <canvas class="modal-chart" id="modal-chart" width="560" height="70"></canvas>
+        </div>
+        <p class="modal-desc" id="modal-desc"></p>
+        <div class="modal-mount">
+          <div class="modal-mount-icon">📌</div>
+          <div class="modal-mount-text" id="modal-mount"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+  (function(){
+    // --- THREE.JS SETUP ---
+    const canvas = document.getElementById('three-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x080a0d);
+    scene.fog = new THREE.FogExp2(0x080a0d, 0.045);
+
+    const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+    camera.position.set(0, 1.4, 5.5);
+    camera.lookAt(0, 1.0, 0);
+
+    // Lighting
+    const ambient = new THREE.AmbientLight(0xffffff, 0.22);
+    scene.add(ambient);
+    const keyLight = new THREE.DirectionalLight(0x88ccff, 1.35);
+    keyLight.position.set(3, 7, 4);
+    keyLight.castShadow = true;
+    keyLight.shadow.mapSize.set(1024, 1024);
+    keyLight.shadow.camera.left = -5; keyLight.shadow.camera.right = 5;
+    keyLight.shadow.camera.top = 8; keyLight.shadow.camera.bottom = -2;
+    scene.add(keyLight);
+    const fill = new THREE.DirectionalLight(0x1fd9a4, 0.4);
+    fill.position.set(-3, 2, -2);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0x4a9eff, 0.55);
+    rim.position.set(0, 2.5, -4.8);
+    scene.add(rim);
+    const groundLight = new THREE.PointLight(0x1fd9a4, 0.2, 3.5);
+    groundLight.position.set(0, 0.08, 0);
+    scene.add(groundLight);
+
+    // Ground
+    const groundPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(18, 18),
+      new THREE.MeshStandardMaterial({ color: 0x0d0f12, roughness: 0.96, metalness: 0.05 })
+    );
+    groundPlane.rotation.x = -Math.PI/2;
+    groundPlane.receiveShadow = true;
+    scene.add(groundPlane);
+    const gridHelper = new THREE.GridHelper(14, 28, 0x1fd9a4, 0x1c2128);
+    gridHelper.position.y = 0.002;
+    gridHelper.material.opacity = 0.25;
+    gridHelper.material.transparent = true;
+    scene.add(gridHelper);
+
+    // --- SHARED MATERIALS ---
+    const bodyMat  = new THREE.MeshStandardMaterial({ color: 0x2d303a, roughness: 0.55, metalness: 0.25 });
+    const skinMat  = new THREE.MeshStandardMaterial({ color: 0xc7a586, roughness: 0.7 });
+    const bladeMat = new THREE.MeshStandardMaterial({ color: 0x4c7fc8, roughness: 0.18, metalness: 0.85 });
+    const sensorMat = (hex) => new THREE.MeshStandardMaterial({ color: hex, roughness: 0.25, metalness: 0.68, emissive: hex, emissiveIntensity: 0.5 });
+
+    const lumbarSMat = sensorMat(0x1fd9a4);
+    const kneeSMat   = sensorMat(0x4a9eff);
+    const ankleSMat  = sensorMat(0xf0a020);
+    const shldrSMat  = sensorMat(0xc87bff);
+    const insoleMatFlash = new THREE.MeshStandardMaterial({ color: 0xff4d4d, emissive: 0xff3333, emissiveIntensity: 0.4, metalness: 0.3 });
+
+    // capsule helper
+    function makeCapsule(rx, ry, mat) {
+      const group = new THREE.Group();
+      const cyl = new THREE.Mesh(new THREE.CylinderGeometry(rx, rx, ry, 14), mat);
+      cyl.castShadow = true;
+      group.add(cyl);
+      [ry/2, -ry/2].forEach(y => {
+        const sph = new THREE.Mesh(new THREE.SphereGeometry(rx, 12, 10), mat);
+        sph.position.y = y;
+        sph.castShadow = true;
+        group.add(sph);
+      });
+      return group;
+    }
+
+    function makeSensorPod(mat, r=0.045) {
+      const group = new THREE.Group();
+      const box = new THREE.Mesh(new THREE.BoxGeometry(r*2, r*0.8, r*2.5), mat);
+      box.castShadow = true;
+      group.add(box);
+      const ledMat = new THREE.MeshStandardMaterial({ color: mat.color, emissive: mat.emissive, emissiveIntensity: 1.6 });
+      const led = new THREE.Mesh(new THREE.SphereGeometry(r*0.32, 8, 8), ledMat);
+      led.position.z = r*1.25;
+      group.add(led);
+      const strapMat = new THREE.MeshStandardMaterial({ color: 0x25282e });
+      [-r*2.2, r*2.2].forEach(x => {
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(r*0.3, r*0.45, r*4.8), strapMat);
+        strap.position.set(x, 0, 0);
+        group.add(strap);
+      });
+      return group;
+    }
+
+    // --- Runner assembly ---
+    const runner = new THREE.Group();
+    scene.add(runner);
+
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 18, 14), skinMat);
+    head.castShadow = true; head.position.set(0, 2.55, 0);
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.143, 16, 14), new THREE.MeshStandardMaterial({ color: 0x191d24, metalness: 0.75, roughness: 0.2 }));
+    helmet.scale.y = 0.65; helmet.position.set(0, 2.62, 0); helmet.castShadow = true;
+    const torso = makeCapsule(0.142, 0.55, bodyMat);
+    torso.position.set(0, 1.94, 0);
+    const hips = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.2, 10), bodyMat);
+    hips.castShadow = true; hips.position.set(0, 1.61, 0);
+    const chestPlate = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.28, 0.05), new THREE.MeshStandardMaterial({ color: 0x1f2229, metalness: 0.85 }));
+    chestPlate.position.set(0, 1.99, 0.13);
+    runner.add(head, helmet, torso, hips, chestPlate);
+
+    // Arms
+    const lShoulder = new THREE.Group(); lShoulder.position.set(-0.18, 2.12, 0);
+    const rShoulder = new THREE.Group(); rShoulder.position.set(0.18, 2.12, 0);
+    const lUA = makeCapsule(0.055, 0.28, bodyMat); lUA.position.y = -0.14; lShoulder.add(lUA);
+    const rUA = makeCapsule(0.055, 0.28, bodyMat); rUA.position.y = -0.14; rShoulder.add(rUA);
+    const lElbow = new THREE.Group(); lElbow.position.y = -0.28; lShoulder.add(lElbow);
+    const rElbow = new THREE.Group(); rElbow.position.y = -0.28; rShoulder.add(rElbow);
+    const lFA = makeCapsule(0.045, 0.24, bodyMat); lFA.position.y = -0.12; lElbow.add(lFA);
+    const rFA = makeCapsule(0.045, 0.24, bodyMat); rFA.position.y = -0.12; rElbow.add(rFA);
+    const shldrSensorObj = makeSensorPod(shldrSMat, 0.042);
+    shldrSensorObj.position.set(-0.19, 2.14, 0.07);
+    runner.add(lShoulder, rShoulder, shldrSensorObj);
+
+    // Legs
+    const lHip = new THREE.Group(); lHip.position.set(-0.1, 1.59, 0);
+    const lThigh = makeCapsule(0.076, 0.45, bodyMat); lThigh.position.y = -0.22;
+    const lKnee = new THREE.Group(); lKnee.position.y = -0.45;
+    const lShin = makeCapsule(0.06, 0.42, bodyMat); lShin.position.y = -0.21;
+    const lAnkle = new THREE.Group(); lAnkle.position.y = -0.42;
+    lHip.add(lThigh, lKnee); lKnee.add(lShin, lAnkle);
+
+    const rHip = new THREE.Group(); rHip.position.set(0.1, 1.59, 0);
+    const rThigh = makeCapsule(0.076, 0.45, bodyMat); rThigh.position.y = -0.22;
+    const rKnee = new THREE.Group(); rKnee.position.y = -0.45;
+    const rShin = makeCapsule(0.06, 0.42, bodyMat); rShin.position.y = -0.21;
+    const rAnkle = new THREE.Group(); rAnkle.position.y = -0.42;
+    rHip.add(rThigh, rKnee); rKnee.add(rShin, rAnkle);
+    runner.add(lHip, rHip);
+
+    // Blades
+    function makeBlade(sideSign) {
+      const g = new THREE.Group();
+      const socket = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.05, 0.12, 10), bladeMat);
+      socket.castShadow = true; g.add(socket);
+      const pts = [
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, -0.15, 0.045),
+        new THREE.Vector3(sideSign*0.07, -0.38, 0.09),
+        new THREE.Vector3(sideSign*0.11, -0.52, 0.01),
+        new THREE.Vector3(sideSign*0.04, -0.61, -0.065)
+      ];
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 22, 0.019, 8, false), bladeMat);
+      tube.castShadow = true; g.add(tube);
+      const toe = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.012, 0.11), bladeMat);
+      toe.position.set(sideSign*0.045, -0.62, -0.04); toe.castShadow = true; g.add(toe);
+      return g;
+    }
+    const lBlade = makeBlade(-1); lAnkle.add(lBlade);
+    const rBlade = makeBlade(1);  rAnkle.add(rBlade);
+
+    // Sensors pods
+    const lumbarSensor = makeSensorPod(lumbarSMat, 0.055);
+    lumbarSensor.position.set(0, 1.78, 0.14);
+    runner.add(lumbarSensor);
+    const lKneeSensor = makeSensorPod(kneeSMat, 0.042); lKneeSensor.position.set(0, -0.45, 0.07); lHip.add(lKneeSensor);
+    const rKneeSensor = makeSensorPod(kneeSMat, 0.042); rKneeSensor.position.set(0, -0.45, 0.07); rHip.add(rKneeSensor);
+    const lAnkleSensor = makeSensorPod(ankleSMat, 0.041); lAnkleSensor.position.set(0, -0.42, 0.07); lKnee.add(lAnkleSensor);
+    const rAnkleSensor = makeSensorPod(ankleSMat, 0.041); rAnkleSensor.position.set(0, -0.42, 0.07); rKnee.add(rAnkleSensor);
+    const lInsoleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.009, 0.125), insoleMatFlash);
+    lInsoleMesh.position.set(-0.025, -0.66, -0.03); lAnkle.add(lInsoleMesh);
+    const rInsoleMesh = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.009, 0.125), insoleMatFlash);
+    rInsoleMesh.position.set(0.025, -0.66, -0.03); rAnkle.add(rInsoleMesh);
+
+    // Lights (glow)
+    const lumbarGlow = new THREE.PointLight(0x1fd9a4, 0.6, 0.55); lumbarGlow.position.set(0,1.78,0.16); runner.add(lumbarGlow);
+    const lKneeGlow  = new THREE.PointLight(0x4a9eff, 0.5, 0.45); lKneeGlow.position.set(-0.12,0.93,0.09); runner.add(lKneeGlow);
+    const rKneeGlow  = new THREE.PointLight(0x4a9eff, 0.5, 0.45); rKneeGlow.position.set(0.12,0.93,0.09); runner.add(rKneeGlow);
+    const lAnkleGlow = new THREE.PointLight(0xf0a020, 0.55, 0.5); lAnkleGlow.position.set(-0.11,0.43,0.09); runner.add(lAnkleGlow);
+    const rAnkleGlow = new THREE.PointLight(0xf0a020, 0.55, 0.5); rAnkleGlow.position.set(0.11,0.43,0.09); runner.add(rAnkleGlow);
+    const shldrGlow  = new THREE.PointLight(0xc87bff, 0.45, 0.45); shldrGlow.position.set(-0.19,2.14,0.11); runner.add(shldrGlow);
+
+    // --- SENSOR DATA CORE (no dashboard) ---
+    const sensorCurrent = { lumbar: 1.1, kl: 0.9, kr: 0.85, al: 1.4, ar: 1.38, sh: 0.85, ins: 0 };
+    const chartHistory = {
+      lumbar: Array(60).fill(1.1), kl: Array(60).fill(0.9), kr: Array(60).fill(0.85),
+      al: Array(60).fill(1.4), ar: Array(60).fill(1.38), sh: Array(60).fill(0.85),
+      ins: Array(60).fill(0)
+    };
+    const BASE_VAL = { lumbar:1.1, kl:0.9, kr:0.85, al:1.4, ar:1.38, sh:0.85 };
+    const NOISE = { lumbar:0.18, kl:0.2, kr:0.18, al:0.28, ar:0.26, sh:0.12 };
+
+    function updateSensorValuesFromTime(t) {
+      const vals = {};
+      for (let k in BASE_VAL) {
+        let val = BASE_VAL[k] + Math.sin(t * 1.7 + k.charCodeAt(0)) * NOISE[k] * 0.55
+                         + Math.sin(t * 3.2 + (k.charCodeAt(1)||0)) * NOISE[k] * 0.35;
+        val = Math.max(0.25, Math.min(3.5, val));
+        vals[k] = val;
+        sensorCurrent[k] = val;
+        if (chartHistory[k]) { chartHistory[k].push(val); if(chartHistory[k].length>60) chartHistory[k].shift(); }
+      }
+      return vals;
+    }
+
+    // Raycasting map
+    const sensorObjects = new Map();
+    function regSensor(group, key) { group.traverse(ch => { if(ch.isMesh) sensorObjects.set(ch, key); }); }
+    regSensor(lumbarSensor, 'lumbar'); regSensor(lKneeSensor, 'kl'); regSensor(rKneeSensor, 'kr');
+    regSensor(lAnkleSensor, 'al'); regSensor(rAnkleSensor, 'ar'); regSensor(shldrSensorObj, 'sh');
+    regSensor(lInsoleMesh, 'ins'); regSensor(rInsoleMesh, 'ins');
+
+    // Modal state
+    let activeModalKey = null;
+    let modalAnim = null;
+    const modalEl = document.getElementById('sensor-modal');
+    const modalBox = document.getElementById('modal-box');
+    const modalChartCanvas = document.getElementById('modal-chart');
+    const modalLiveValSpan = document.getElementById('modal-live-val');
+    
+    const sensorInfo = {
+      lumbar:{ name:'Lumbar IMU', accent:'#1fd9a4', max:3, unit:'g', type:'6-DOF IMU', freq:'200 Hz', desc:'Measures trunk acceleration, forward lean and sway.', mount:'Strapped to lower back (L3–L4) with neoprene belt.', image:'lumbar' },
+      kl:{ name:'Knee IMU — Left', accent:'#4a9eff', max:3, unit:'g', type:'6-DOF IMU', freq:'200 Hz', desc:'Captures flexion angle, impact force, valgus collapse.', mount:'Patella sleeve mount with anti-rotation clips.', image:'knee' },
+      kr:{ name:'Knee IMU — Right', accent:'#4a9eff', max:3, unit:'g', type:'6-DOF IMU', freq:'200 Hz', desc:'Right knee asymmetry monitoring — overuse injury early warning.', mount:'Velcro-locked patella strap, BLE hub.', image:'knee' },
+      al:{ name:'Ankle IMU — Left', accent:'#f0a020', max:3, unit:'g', type:'6-DOF + strain', freq:'500 Hz', desc:'Push-off power, plantar-flexion velocity, peak forces.', mount:'Titanium screw-mount in blade socket.', image:'ankle' },
+      ar:{ name:'Ankle IMU — Right', accent:'#f0a020', max:3, unit:'g', type:'6-DOF + strain', freq:'500 Hz', desc:'Comparative reference for differential push-off energy.', mount:'Hardwired micro-USB on carbon blade.', image:'ankle' },
+      sh:{ name:'Shoulder IMU', accent:'#c87bff', max:3, unit:'g', type:'6-DOF IMU', freq:'200 Hz', desc:'Arm-swing amplitude, neuromuscular fatigue indicator.', mount:'Acromion-contour plate on race singlet.', image:'shoulder' },
+      ins:{ name:'Insole Pressure', accent:'#ff4d4d', max:1, unit:'contact', type:'Thin-film FSR', freq:'1000 Hz', desc:'Blade contact & pressure distribution, toe-off timing.', mount:'0.3mm silicone mat inside blade foot pad.', image:'insole' }
+    };
+    function getSensorSVG(type,accent){
+      const svgLib={
+        lumbar:`<svg viewBox="0 0 560 180"><rect width="560" height="180" fill="#080a0d"/><rect x="238" y="48" width="84" height="28" rx="6" fill="${accent}" fill-opacity=".2" stroke="${accent}" stroke-width="1.8"/><circle cx="308" cy="62" r="5" fill="${accent}"/><text x="280" y="150" text-anchor="middle" fill="${accent}" font-size="10">LUMBAR L3–L4</text></svg>`,
+        knee:`<svg viewBox="0 0 560 180"><rect width="560" height="180" fill="#080a0d"/><ellipse cx="280" cy="80" rx="46" ry="35" fill="none" stroke="${accent}" stroke-width="1.5" stroke-dasharray="4"/><rect x="240" y="68" width="80" height="22" rx="6" fill="${accent}" fill-opacity=".2" stroke="${accent}"/><circle cx="304" cy="79" r="5" fill="${accent}"/><text x="280" y="158" text-anchor="middle" fill="${accent}" font-size="10">KNEE PATELLA STRAP</text></svg>`,
+        ankle:`<svg viewBox="0 0 560 180"><rect width="560" height="180" fill="#080a0d"/><path d="M280,20 L290,70 L315,130 L285,160" fill="none" stroke="${accent}" stroke-width="2" opacity=".7"/><rect x="250" y="28" width="60" height="22" rx="5" fill="${accent}" fill-opacity=".2" stroke="${accent}"/><circle cx="296" cy="39" r="5" fill="${accent}"/><text x="280" y="168" text-anchor="middle" fill="${accent}" font-size="10">ANKLE SOCKET MOUNT</text></svg>`,
+        shoulder:`<svg viewBox="0 0 560 180"><rect width="560" height="180" fill="#080a0d"/><ellipse cx="280" cy="85" rx="60" ry="40" fill="none" stroke="${accent}" stroke-width="1.5"/><rect x="248" y="72" width="64" height="22" rx="5" fill="${accent}" fill-opacity=".2" stroke="${accent}"/><circle cx="300" cy="83" r="5" fill="${accent}"/><text x="280" y="160" text-anchor="middle" fill="${accent}" font-size="10">SHOULDER DELTOID</text></svg>`,
+        insole:`<svg viewBox="0 0 560 180"><rect width="560" height="180" fill="#080a0d"/><ellipse cx="280" cy="95" rx="85" ry="50" fill="none" stroke="${accent}" stroke-width="1.5"/><rect x="210" y="45" width="46" height="28" rx="4" fill="${accent}" fill-opacity=".3"/><text x="280" y="165" text-anchor="middle" fill="${accent}" font-size="10">INSOLE PRESSURE MAT</text></svg>`
+      };
+      return svgLib[type] || svgLib.lumbar;
+    }
+
+    function openModal(key){
+      const info = sensorInfo[key];
+      if(!info) return;
+      activeModalKey = key;
+      modalBox.style.setProperty('--modal-accent', info.accent);
+      document.getElementById('modal-header-dot').style.background = info.accent;
+      document.getElementById('modal-header-dot').style.boxShadow = `0 0 12px ${info.accent}`;
+      document.getElementById('modal-title').textContent = info.name;
+      document.getElementById('modal-image').innerHTML = getSensorSVG(info.image, info.accent);
+      document.getElementById('modal-desc').innerHTML = info.desc;
+      document.getElementById('modal-mount').innerHTML = info.mount;
+      let currVal = key === 'ins' ? (sensorCurrent.ins ? 'ON' : 'OFF') : (sensorCurrent[key]?.toFixed(2)+info.unit || '—');
+      document.getElementById('modal-stats').innerHTML = `
+        <div class="stat-box"><div class="stat-box-label">Current</div><div class="stat-box-val" id="modal-live-val">${currVal}</div><div class="stat-box-unit">${info.unit}</div></div>
+        <div class="stat-box"><div class="stat-box-label">Type</div><div class="stat-box-val" style="font-size:13px">${info.type}</div></div>
+        <div class="stat-box"><div class="stat-box-label">Sample Rate</div><div class="stat-box-val" style="font-size:16px">${info.freq}</div></div>
+      `;
+      modalEl.classList.add('open');
+      function drawModalChartFrame(){
+        if(!activeModalKey) return;
+        const ctx = modalChartCanvas.getContext('2d');
+        const w = modalChartCanvas.width, h = modalChartCanvas.height;
+        const hist = chartHistory[activeModalKey] || Array(60).fill(0);
+        ctx.clearRect(0,0,w,h);
+        ctx.strokeStyle = info.accent; ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        const maxVal = (activeModalKey === 'ins') ? 1 : (info.max || 3);
+        hist.forEach((v,i)=>{
+          const x = (i/(hist.length-1))*w;
+          const y = h - (Math.min(v, maxVal)/maxVal)*h*0.85 - h*0.07;
+          i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+        ctx.fillStyle = info.accent+'22';
+        ctx.lineTo(w,h); ctx.lineTo(0,h); ctx.fill();
+        modalAnim = requestAnimationFrame(drawModalChartFrame);
+      }
+      if(modalAnim) cancelAnimationFrame(modalAnim);
+      drawModalChartFrame();
+    }
+    function closeModal(){ modalEl.classList.remove('open'); activeModalKey=null; if(modalAnim) cancelAnimationFrame(modalAnim); }
+    document.getElementById('modal-close-btn').addEventListener('click', closeModal);
+    modalEl.addEventListener('click', e=>{ if(e.target===modalEl) closeModal(); });
+    document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeModal(); });
+
+    // ---- RAYCASTING CLICK ----
+    const raycaster = new THREE.Raycaster();
+    const mouseVec = new THREE.Vector2();
+    let mouseDownPos = {x:0,y:0};
+    canvas.addEventListener('mousedown', e=> { mouseDownPos={x:e.clientX,y:e.clientY}; });
+    canvas.addEventListener('click', e=>{
+      const dx=e.clientX-mouseDownPos.x, dy=e.clientY-mouseDownPos.y;
+      if(Math.hypot(dx,dy)>5) return;
+      const rect = document.getElementById('vp').getBoundingClientRect();
+      mouseVec.x = ((e.clientX - rect.left)/rect.width)*2-1;
+      mouseVec.y = -((e.clientY - rect.top)/rect.height)*2+1;
+      raycaster.setFromCamera(mouseVec, camera);
+      const meshes = [...sensorObjects.keys()];
+      const hits = raycaster.intersectObjects(meshes);
+      if(hits.length){
+        const key = sensorObjects.get(hits[0].object);
+        if(key) openModal(key);
+      }
+    });
+    canvas.addEventListener('mousemove', e=>{
+      if(isDragging) return;
+      const rect = document.getElementById('vp').getBoundingClientRect();
+      mouseVec.x = ((e.clientX - rect.left)/rect.width)*2-1;
+      mouseVec.y = -((e.clientY - rect.top)/rect.height)*2+1;
+      raycaster.setFromCamera(mouseVec,camera);
+      const hits = raycaster.intersectObjects([...sensorObjects.keys()]);
+      canvas.style.cursor = hits.length ? 'pointer' : 'default';
+    });
+
+    // --- Animation control (START / STOP) ---
+    let simulationActive = true;
+    let simulationTime = 0;
+    let lastTimestamp = 0;
+    const toggleBtn = document.getElementById('toggle-sim-btn');
+    const stateSpan = document.getElementById('sim-state-label');
+    toggleBtn.addEventListener('click', ()=>{
+      simulationActive = !simulationActive;
+      if(simulationActive){
+        stateSpan.innerHTML = '● RUNNING';
+        toggleBtn.innerHTML = '⏸';
+      } else {
+        stateSpan.innerHTML = '▍ PAUSED';
+        toggleBtn.innerHTML = '▶';
+      }
+    });
+
+    // camera orbit
+    let isDragging = false, prevX=0, prevY=0, theta=0.2, phi=0.15, radius=5.5;
+    const camTarget = new THREE.Vector3(0, 1.25, 0);
+    canvas.addEventListener('mousedown', e=>{ isDragging=true; prevX=e.clientX; prevY=e.clientY; });
+    window.addEventListener('mouseup',()=>isDragging=false);
+    canvas.addEventListener('mousemove', e=>{
+      if(!isDragging) return;
+      theta -= (e.clientX-prevX)*0.007;
+      phi += (e.clientY-prevY)*0.006;
+      phi = Math.max(-0.28, Math.min(0.58, phi));
+      prevX=e.clientX; prevY=e.clientY;
+    });
+    canvas.addEventListener('wheel', e=>{ radius = Math.max(2.8, Math.min(8.5, radius + e.deltaY*0.008)); e.preventDefault(); }, {passive:false});
+    
+    function resize(){ 
+      const vp = document.getElementById('vp');
+      const w = vp.clientWidth, h = vp.clientHeight;
+      renderer.setSize(w,h); camera.aspect = w/h; camera.updateProjectionMatrix();
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // --- main animation ---
+    function animate(){
+      requestAnimationFrame(animate);
+      const delta = Math.min(0.033, 1/30);
+      if(simulationActive){
+        simulationTime += delta * 1.2;
+        const t = simulationTime;
+        // update gait & sensor values
+        const gait = t * 2.35;
+        const bodyBob = Math.abs(Math.sin(gait*2))*0.018;
+        const trunkLean = Math.sin(gait)*0.045;
+        const armSwing = Math.sin(gait)*0.45;
+        runner.position.y = bodyBob;
+        torso.rotation.y = trunkLean;
+        hips.rotation.y = -trunkLean*0.5;
+        lShoulder.rotation.x = armSwing*0.72; rShoulder.rotation.x = -armSwing*0.72;
+        lElbow.rotation.x = Math.max(0, Math.sin(gait)*0.52); rElbow.rotation.x = Math.max(0, -Math.sin(gait)*0.52);
+        lHip.rotation.x = Math.sin(gait + Math.PI)*0.58; lKnee.rotation.x = Math.max(0, Math.sin(gait+Math.PI+0.55))*1.12;
+        lAnkle.rotation.x = -Math.max(0, Math.sin(gait+Math.PI+0.95))*0.48;
+        rHip.rotation.x = Math.sin(gait)*0.58; rKnee.rotation.x = Math.max(0, Math.sin(gait+0.55))*1.12;
+        rAnkle.rotation.x = -Math.max(0, Math.sin(gait+0.95))*0.48;
+
+        // Sensor data + insole contact
+        const live = updateSensorValuesFromTime(t);
+        const lContact = Math.max(0, Math.sin(gait + Math.PI)) > 0.7;
+        const rContact = Math.max(0, Math.sin(gait)) > 0.7;
+        const contactState = (lContact || rContact) ? 1 : 0;
+        sensorCurrent.ins = contactState;
+        chartHistory.ins.push(contactState); if(chartHistory.ins.length>60) chartHistory.ins.shift();
+        const intensity = contactState ? 0.85 : 0.12;
+        lInsoleMesh.material.emissiveIntensity = intensity;
+        rInsoleMesh.material.emissiveIntensity = intensity;
+
+        // glow pulse
+        const pulse = 0.45 + 0.5 * Math.abs(Math.sin(t*2.3));
+        lumbarGlow.intensity = 0.5*pulse; lKneeGlow.intensity=0.55*pulse; rKneeGlow.intensity=0.55*pulse;
+        lAnkleGlow.intensity=0.65*pulse; rAnkleGlow.intensity=0.65*pulse; shldrGlow.intensity=0.4*pulse;
+
+        // update modal live value if open
+        if(activeModalKey && document.getElementById('modal-live-val')){
+          const mSpan = document.getElementById('modal-live-val');
+          if(activeModalKey === 'ins') mSpan.innerText = contactState ? 'ON' : 'OFF';
+          else mSpan.innerText = (sensorCurrent[activeModalKey] || 0).toFixed(2)+'g';
+        }
+      } else {
+        // paused: keep last contact, but no motion updates — just keep insole emissive from frozen state
+        // freeze emissive
+      }
+      // camera + render always
+      camera.position.x = camTarget.x + radius * Math.sin(theta) * Math.cos(phi);
+      camera.position.y = camTarget.y + radius * Math.sin(phi) + 0.45;
+      camera.position.z = camTarget.z + radius * Math.cos(theta) * Math.cos(phi);
+      camera.lookAt(camTarget);
+      renderer.render(scene, camera);
+    }
+    animate();
+  })();
+</script>
+</body>
+</html>

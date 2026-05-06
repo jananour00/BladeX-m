@@ -7,6 +7,7 @@ Expected in root: all_scalers.joblib, cgnn_model_complete.pt
 import os
 import numpy as np
 import joblib
+import torch
 from typing import Dict, Any, List
 
 # Reuse Bayesian scalers (same 11 features)

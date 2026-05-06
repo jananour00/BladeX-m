@@ -28,19 +28,61 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 def load_qom_model(model_path, device):
     """
-    Load QoM Transformer model + scaler.
+    Load QoM Transformer model from state_dict checkpoint.
+    The checkpoint contains: model_state_dict, scaler, feature_cols,
+    sequence_length, input_dim, d_model, nhead, num_layers.
     Returns: model, scaler, feature_cols, seq_length
     """
-
     try:
-        model = torch.jit.load(model_path, map_location=device)
+        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+
+        # Extract architecture params
+        input_dim = checkpoint.get('input_dim', 10)
+        d_model = checkpoint.get('d_model', 64)
+        nhead = checkpoint.get('nhead', 4)
+        num_layers = checkpoint.get('num_layers', 3)
+        seq_length = checkpoint.get('sequence_length', 30)
+        feature_cols = checkpoint.get('feature_cols', QOM_FEATURES)
+        scaler = checkpoint.get('scaler', None)
+
+        # Build the Transformer model architecture (must match training exactly)
+        class QoMTransformer(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.input_proj = nn.Linear(input_dim, d_model)
+                # pos_encoder is a single TransformerEncoderLayer (used as positional encoding step)
+                self.pos_encoder = nn.TransformerEncoderLayer(
+                    d_model=d_model, nhead=nhead, dim_feedforward=2048,
+                    dropout=0.1, batch_first=True
+                )
+                encoder_layer = nn.TransformerEncoderLayer(
+                    d_model=d_model, nhead=nhead, dim_feedforward=2048,
+                    dropout=0.1, batch_first=True
+                )
+                self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+                self.regressor = nn.Sequential(
+                    nn.Linear(d_model, d_model // 2),
+                    nn.ReLU(),
+                    nn.Dropout(0.1),
+                    nn.Linear(d_model // 2, 1),
+                    nn.Sigmoid()
+                )
+
+            def forward(self, x):
+                x = self.input_proj(x)
+                x = self.pos_encoder(x)
+                x = self.transformer(x)
+                x = x.mean(dim=1)  # average pooling over sequence
+                return self.regressor(x)
+
+        model = QoMTransformer().to(device)
+        model.load_state_dict(checkpoint['model_state_dict'])
         model.eval()
-        scaler_path = model_path.replace('qom_transformer_model.pth', 'qom_scaler.joblib')
-        scaler = joblib.load(scaler_path) if os.path.exists(scaler_path) else None
-        feature_cols = QOM_FEATURES
-        seq_length = getattr(model, 'seq_length', 30)
-        log.info(f"✅ QoM model loaded: seq_len={seq_length}, feats={len(feature_cols)}")
+
+        log.info(f"[OK] QoM Transformer loaded: input_dim={input_dim}, d_model={d_model}, "
+                 f"nhead={nhead}, layers={num_layers}, seq_len={seq_length}, feats={len(feature_cols)}")
         return model, scaler, feature_cols, seq_length
+
     except Exception as e:
         log.warning(f"QoM load failed: {e}. Using dummy.")
         class DummyQoM(torch.nn.Module):

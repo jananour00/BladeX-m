@@ -23,7 +23,7 @@ QOM_SEQ_LENGTH = 30  # Default, overridden by checkpoint
 class QoMPreprocessor:
     @staticmethod
     def prepare_sequence_from_df(df: pd.DataFrame, seq_length: int = QOM_SEQ_LENGTH) -> dict:
-        \"\"\"
+        """
         Process DataFrame → model-ready sequences (last N rows).
         
         Args:
@@ -36,7 +36,7 @@ class QoMPreprocessor:
                 'features': dict of aggregates,
                 'rows_used': int  # last seq_length rows
             }
-        \"\"\"
+        """
         df = QoMPreprocessor._normalize_columns(df)
         
         # Select last seq_length rows
@@ -71,9 +71,9 @@ class QoMPreprocessor:
     
     @staticmethod
     def prepare_sequence_from_manual(data: dict, seq_length: int = QOM_SEQ_LENGTH) -> np.ndarray:
-        \"\"\"
+        """
         Manual input → padded sequence (repeat last row).
-        \"\"\"
+        """
         # Extract single row features
         row_feats = [float(data.get(f, 0.0)) for f in QOM_FEATURES]
         
@@ -83,9 +83,9 @@ class QoMPreprocessor:
     
     @staticmethod
     def interpret_qom(qom_score: float) -> dict:
-        \"\"\"
+        """
         Interpret QoM score (0-1) → human-readable.
-        \"\"\"
+        """
         if qom_score >= 0.8:
             return {
                 'level': 'Excellent',
@@ -140,9 +140,9 @@ class QoMPreprocessor:
 
 # For multiple windows (upload)
 def predict_multiple_windows(sequence, seq_length, stride=5):
-    \"\"\"
+    """
     Slide window over sequence → multiple predictions.
-    \"\"\"
+    """
     predictions = []
     n = len(sequence) - seq_length + 1
     for i in range(0, max(0, n), stride):
