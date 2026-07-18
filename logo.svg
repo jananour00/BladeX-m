@@ -1,0 +1,58 @@
+<svg width="720" height="180" viewBox="0 0 720 180" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <style>
+      .ink   { fill: #0B1220; }
+      .sub   { fill: #64748B; }
+      .blade { fill: #2563EB; }
+      .twin  { fill: #93C5FD; opacity: 0.55; }
+      .pulse { fill: none; stroke: #F97316; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+      .word  { font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 800; letter-spacing: 0.3px; }
+      .tag   { font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 500; }
+    </style>
+  </defs>
+
+  <!-- badge, rounded square to echo the module cards in the architecture diagram -->
+  <rect x="10" y="10" width="150" height="150" rx="30" fill="#0B1220"/>
+
+  <!-- ghosted "digital twin" echo of the blade, offset back-left -->
+  <path class="twin" d="M76 40
+           C 72 40, 69 43, 69 47
+           L 69 90
+           C 69 100, 63 107, 55 111
+           C 48 115, 45 122, 49 129
+           C 53 136, 61 137, 68 133
+           C 83 124, 91 108, 91 92
+           L 91 47
+           C 91 43, 88 40, 84 40
+           Z"/>
+
+  <!-- prosthetic running blade, solid -->
+  <path class="blade" d="M100 34
+           C 96 34, 93 37, 93 41
+           L 93 96
+           C 93 109, 85 118, 75 122
+           C 66 126, 61 135, 65 144
+           C 69 152, 80 153, 89 148
+           C 109 136, 120 116, 120 96
+           L 120 41
+           C 120 37, 117 34, 113 34
+           Z"/>
+
+  <!-- fatigue / sensor pulse line running through the blade -->
+  <polyline class="pulse" points="72,72 89,72 96,54 105,90 112,72 132,72"/>
+  <circle cx="96" cy="54" r="3.6" fill="#F97316"/>
+  <circle cx="105" cy="90" r="3.6" fill="#F97316"/>
+
+  <!-- wordmark -->
+  <text x="196" y="86" class="ink word" font-size="46">BladeX<tspan fill="#2563EB">-m</tspan></text>
+  <text x="198" y="112" class="sub tag" font-size="16">Digital Twin for Para-Athlete Fatigue &amp; Injury Prediction</text>
+
+  <!-- four-stage pipeline strip: Acquisition -> Engineering -> Modelling -> Visualization -->
+  <g transform="translate(198 132)">
+    <rect x="0"   y="0" width="26" height="8" rx="4" fill="#60A5FA"/>
+    <rect x="34"  y="0" width="26" height="8" rx="4" fill="#FBBF24"/>
+    <rect x="68"  y="0" width="26" height="8" rx="4" fill="#F472B6"/>
+    <rect x="102" y="0" width="26" height="8" rx="4" fill="#2DD4BF"/>
+    <text x="140" y="8" class="sub tag" font-size="13">Acquisition · Engineering · Modelling · Visualization</text>
+  </g>
+</svg>
