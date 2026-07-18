@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="image.jpg" alt="BladeX-m logo" width="560"/>
+<img src="logo.svg" alt="BladeX-m logo" width="560"/>
 
 <br/>
 
@@ -43,7 +43,7 @@ A blade runner's prosthesis gives them speed but takes away feedback — there's
 Video comes in on the left; a live coaching decision comes out on the right. Four stages, each color-coded, each traceable back to real athlete data.
 
 <div align="center">
-<img src="assets/architecture-diagram.png" alt="BladeX-m four-module architecture: Data Acquisition, Feature Engineering, ML Models, Digital Twin Platform" width="880"/>
+<img src="image.png" alt="BladeX-m four-module architecture: Data Acquisition, Feature Engineering, ML Models, Digital Twin Platform" width="880"/>
 </div>
 
 <details>
