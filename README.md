@@ -165,7 +165,7 @@ Fatigue itself isn't observable in video, so it's operationalized as a transpare
 
 ### 👥 Team 7
 
-Shahd Salah · Shaimaa Abdelaziz · Jana Gamal · Mariam Hosny · Nada Mostafa · Hamdy Ahmed
+Shahd Salah · Shaimaa Abdelaziz · Jana Gamal · Mariam Hosny ·  Hamdy Ahmed . Nada Mostafa 
 
 ### 📖 Citation
 
